@@ -25,34 +25,26 @@ func (r *float64RingBuffer) Capacity() int {
 }
 
 func (r *float64RingBuffer) Add(v float64) {
-	//fmt.Println("Ringbuffer Add Value", v)
 	if r.length < r.capacity {
 		r.length += 1
 	}
 	r.buffer[r.tail] = v
 	r.tail = (r.tail + 1) % r.capacity
-	//fmt.Println("RingBuffer ADD Ran", r.tail)
 }
 
 func (r *float64RingBuffer) Slice(i, j int) []float64 {
 	if r.length < r.capacity {
-		//fmt.Println("Slice Length:", r.length)
-		//fmt.Println("Slice J:", j)
 		if r.length < j {
-			//fmt.Println("Slice r.Length IF:")
 			j = r.length
 		}
 		return r.buffer[i:j]
 	}
-	//fmt.Println("Slice Append:")
 	s := append(r.buffer[r.tail:r.capacity], r.buffer[:r.tail]...)
-	//fmt.Println("Slice Append 's':", s)
 	return s[i:j]
 }
 
 func (r *float64RingBuffer) Last(n int) []float64 {
 	start := r.length - n
-	//fmt.Print("Last r.Length", r.length)
 	if start < 0 {
 		start = 0
 	}
