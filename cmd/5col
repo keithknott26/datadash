@@ -1,4 +1,4 @@
-x	Case Lock Failures	Case Closed Exceptions	FRM-C Timeouts	FRM-C Responses
+x	Lock Failures	Exceptions	Timeouts	Responses
 0	0	0	0	0
 00:00	14	43	5	688
 00:00	0	10	1	464

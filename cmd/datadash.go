@@ -20,7 +20,6 @@ import (
 	"github.com/mum4k/termdash/container"
 	"github.com/mum4k/termdash/draw"
 	"github.com/mum4k/termdash/keyboard"
-	"github.com/mum4k/termdash/numbers"
 	"github.com/mum4k/termdash/terminal/termbox"
 	"github.com/mum4k/termdash/terminalapi"
 	"github.com/mum4k/termdash/widgets/linechart"
@@ -31,14 +30,14 @@ import (
 )
 
 var (
-	app       = kingpin.New("datadash", "A CCS Graphing Application")
-	debug     = app.Flag("debug", "Enable Debug Mode").Bool()
-	delimiter = app.Flag("delimiter", "Record Delimiter").Default("\t").String()
-	lineMode  = app.Flag("line-mode", "Line Mode: Dot, Braille").Short('l').Default("braille").String()
-	graphMode = app.Flag("graph-mode", "Graph Type: line, scatter").Short('g').Default("line").String()
-	labelMode = app.Flag("label-mode", "X-Axis Labels: first, time").Short('m').Default("first").String()
-	hScale    = app.Flag("horizontal-scale", "Horizontal Scale: (1,2,3,...)").Short('h').Default("1").Int()
-	inputFile = app.Arg("input file", "A file containing data in rows delimited by delimiter 'd'").File()
+	app            = kingpin.New("datadash", "A CCS Graphing Application")
+	debug          = app.Flag("debug", "Enable Debug Mode").Bool()
+	delimiter      = app.Flag("delimiter", "Record Delimiter:").Short('d').Default("\t").String()
+	labelMode      = app.Flag("label-mode", "X-Axis Labels: 'first' (use the first record in the column) or 'time' (use the current time)").Short('m').Default("first").String()
+	hScale         = app.Flag("horizontal-scale", "Horizontal Graph Scale (Line graph width * X): (1,2,3,...)").Short('h').Default("1").Int()
+	redrawInterval = app.Flag("redraw-interval", "The interval at which objects on the screen are redrawn: (100ms,250ms,1s,5s..)").Short('r').Default("100ms").Duration()
+	seekInterval   = app.Flag("seek-interval", "The interval at which records (lines) are read from the datasource: (100ms,250ms,1s,5s..)").Short('l').Default("100ms").Duration()
+	inputFile      = app.Arg("input file", "A file containing a label header, and data in columns separated by delimiter 'd'.\nData piped from Stdin uses the same format").File()
 
 	plot1buf *ring.Buffer
 	plot2buf *ring.Buffer
@@ -48,7 +47,7 @@ var (
 	ctx context.Context
 	//to be removed
 	//keep
-	dataChan      = make(chan []string)
+	dataChan      = make(chan []string, 5)
 	labels        = make([]string, 0, 10)
 	graphs        = 1
 	termWidth     = 1
@@ -60,8 +59,6 @@ var (
 	faster    = false
 	interrupt = false
 	resume    = false
-	// redrawInterval is how often we redraw the screen and pull a record from the channel.
-	redrawInterval = 250 * time.Millisecond
 	//for pausing the graph
 	//define colors
 	//0 black
@@ -89,25 +86,25 @@ var (
 	Foreground = 7
 	Background = -1
 
-	ParOneBorder     = 27
+	ParOneBorder     = 26
 	ParOneTitle      = 82
-	ParTwoBorder     = 27
+	ParTwoBorder     = 25
 	ParTwoTitle      = 13
-	ParThreeBorder   = 27
+	ParThreeBorder   = 25
 	ParThreeTitle    = 45
-	ParFourBorder    = 27
+	ParFourBorder    = 25
 	ParFourTitle     = 9
 	ParText          = 3
-	ParPointer       = 8
+	ParPointer       = 248
 	ParValue         = 15
 	LineLow          = 2
 	LineHigh         = 1
-	GraphOneBorder   = 27
-	GraphTwoBorder   = 27
-	GraphThreeBorder = 27
-	GraphFourBorder  = 27
+	GraphOneBorder   = 25
+	GraphTwoBorder   = 25
+	GraphThreeBorder = 25
+	GraphFourBorder  = 25
 	GraphAxes        = 8
-	GraphXLabels     = 242
+	GraphXLabels     = 248
 	GraphYLabels     = 15
 	GraphTitles      = 2
 	GraphLineOne     = 82
@@ -118,7 +115,7 @@ var (
 )
 
 func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*container.Container, error) {
-	if len(labels)-1 == 1 {
+	if graphs == 1 {
 		FirstRow := []container.Option{
 			container.SplitVertical(
 				container.Left(
@@ -142,7 +139,7 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 			return nil, err
 		}
 		return c, nil
-	} else if len(labels)-1 == 2 {
+	} else if graphs == 2 {
 		FirstRow := []container.Option{
 			container.SplitVertical(
 				container.Left(
@@ -191,7 +188,7 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 			return nil, err
 		}
 		return c, nil
-	} else if len(labels)-1 == 3 {
+	} else if graphs == 3 {
 		FirstRow := []container.Option{
 			container.SplitVertical(
 				container.Left(
@@ -265,7 +262,7 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 			return nil, err
 		}
 		return c, nil
-	} else if len(labels)-1 == 4 {
+	} else if graphs == 4 {
 		FirstRow := []container.Option{
 			container.SplitVertical(
 				container.Left(
@@ -390,58 +387,59 @@ func parsePlotData(records []string) {
 		//Use the time as a X-Axis labels
 		now := time.Now()
 		label = fmt.Sprintf("%02d:%02d:%02d", now.Hour(), now.Minute(), now.Second())
-	} else {
-		//Use the records as the X-Axis labels
-		label = records[0]
-		record = records[1:]
 	}
+
 	for i, x := range record {
 		if i == 0 {
 			if *debug {
-				fmt.Println("Record[0]:", record[i])
-				fmt.Println("i:", i)
-				fmt.Println("x:", x)
+				fmt.Println("DEBUG:\tRecord[0]:", record[i])
+				fmt.Println("DEBUG:\tCount Value[i]:", i)
+				fmt.Println("DEBUG:\tRecord Value [x]:", x)
+				fmt.Println("DEBUG:\tLabel Value:", label)
 			}
 			val, _ := strconv.ParseFloat(strings.TrimSpace(record[i]), 64)
 			plot1buf.Add(val, label)
 		}
 		if i == 1 {
 			if *debug {
-				fmt.Println("Record[1]:", record[i])
-				fmt.Println("i:", i)
-				fmt.Println("x:", x)
+				fmt.Println("DEBUG:\tRecord[1]:", record[i])
+				fmt.Println("DEBUG:\tCount Value[i]:", i)
+				fmt.Println("DEBUG:\tRecord Value [x]:", x)
+				fmt.Println("DEBUG:\tLabel Value:", label)
 			}
 			val, _ := strconv.ParseFloat(strings.TrimSpace(record[i]), 64)
 			plot2buf.Add(val, label)
 		}
 		if i == 2 {
 			if *debug {
-				fmt.Println("Record[2]:", record[i])
-				fmt.Println("i:", i)
-				fmt.Println("x:", x)
+				fmt.Println("DEBUG:\tRecord[2]:", record[i])
+				fmt.Println("DEBUG:\tCount Value[i]:", i)
+				fmt.Println("DEBUG:\tRecord Value [x]:", x)
+				fmt.Println("DEBUG:\tLabel Value:", label)
 			}
 			val, _ := strconv.ParseFloat(strings.TrimSpace(record[i]), 64)
 			plot3buf.Add(val, label)
 		}
 		if i == 3 {
 			if *debug {
-				fmt.Println("Record[3]:", record[i])
-				fmt.Println("i:", i)
-				fmt.Println("x:", x)
+				fmt.Println("DEBUG:\tRecord[3]:", record[i])
+				fmt.Println("DEBUG:\tCount Value[i]:", i)
+				fmt.Println("DEBUG:\tRecord Value [x]:", x)
+				fmt.Println("DEBUG:\tLabel Value:", label)
 			}
 			val, _ := strconv.ParseFloat(strings.TrimSpace(record[i]), 64)
 			plot4buf.Add(val, label)
 		}
 	}
 	if *debug {
-		fmt.Println("Buffer Data[1]: ", plot1buf.Last(100, 100))
-		fmt.Println("Buffer Lables[1]: ", plot1buf.LastLabels(100, 100))
-		fmt.Println("Buffer Data[2]: ", plot2buf.Last(100, 100))
-		fmt.Println("Buffer Lables[2]: ", plot2buf.LastLabels(100, 100))
-		fmt.Println("Buffer Data[3]: ", plot3buf.Last(100, 100))
-		fmt.Println("Buffer Lables[3]: ", plot3buf.LastLabels(100, 100))
-		fmt.Println("Buffer Data[4]: ", plot4buf.Last(100, 100))
-		fmt.Println("Buffer Lables[4]: ", plot4buf.LastLabels(100, 100))
+		fmt.Println("DEBUG:\tBuffer Data[1]: ", plot1buf.Last(100, 100))
+		fmt.Println("DEBUG:\tBuffer Lables[1]: ", plot1buf.LastLabels(100, 100))
+		fmt.Println("DEBUG:\tBuffer Data[2]: ", plot2buf.Last(100, 100))
+		fmt.Println("DEBUG:\tBuffer Lables[2]: ", plot2buf.LastLabels(100, 100))
+		fmt.Println("DEBUG:\tBuffer Data[3]: ", plot3buf.Last(100, 100))
+		fmt.Println("DEBUG:\tBuffer Lables[3]: ", plot3buf.LastLabels(100, 100))
+		fmt.Println("DEBUG:\tBuffer Data[4]: ", plot4buf.Last(100, 100))
+		fmt.Println("DEBUG:\tBuffer Lables[4]: ", plot4buf.LastLabels(100, 100))
 
 	}
 }
@@ -454,7 +452,6 @@ func newLinechart(ctx context.Context) *linechart.LineChart {
 	//set termWidth to actual width of linechart 83% of screen
 	termWidth = int((float64(termWidth)*float64(0.83) - 3))
 	data1 := plot1buf.Last(termHeight, termWidth)
-	//fmt.Println("NEW LINECHARTDATA:", data1)
 	for i := 0; i < 100; i++ {
 		v := math.Pow(math.Sin(float64(i)), 63) * math.Sin(float64(i)+1.5) * 8
 		inputs = append(inputs, v)
@@ -472,9 +469,9 @@ func newLinechart(ctx context.Context) *linechart.LineChart {
 		linechart.YLabelCellOpts(cell.FgColor(cell.ColorGreen)),
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorGreen)),
 	)
-	fmt.Println("Float Values", data1)
+	fmt.Println("DEBUG:\tFloat Values", data1)
 	step := 0
-	go periodic(ctx, redrawInterval/10, func() error {
+	go periodic(ctx, *redrawInterval/10, func() error {
 		step = (step + 1) % len(inputs)
 		if err := lc.Series("heartbeat", inputs,
 			linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(87))),
@@ -491,6 +488,9 @@ func newLinechart(ctx context.Context) *linechart.LineChart {
 
 //calulate data stats
 func prepareStats(buffer *ring.Buffer) string {
+	if *debug {
+		fmt.Println("DEBUG:\tprepareStats Function: Execute")
+	}
 	//use only accumulated data instead of ring buffer
 	data := buffer.Container
 	outliers, _ := stats.QuartileOutliers(data)
@@ -500,18 +500,33 @@ func prepareStats(buffer *ring.Buffer) string {
 	max, _ := stats.Max(data)
 	//variance, _ := stats.Variance(data)
 	//stddev, _ := stats.StandardDeviation(data)
-	var outlier []float64
-	var outlierstring string
+	var outlierStr string
+	var outliersArr []float64
+
+	//create the outliers slice
 	for _, v := range outliers.Extreme {
-		outlier = append(outlier, v)
-		val, _ := numbers.RoundToNonZeroPlaces(v, 0)
-		s := fmt.Sprintf("%.2f", val)
-		outlierstring = outlierstring + s + "\n             "
+		outliersArr = append(outliersArr, v)
+	}
+	//overwrite the outliers slice with the outliers
+	for _, v := range outliersArr {
+		outliersArr = append(outliersArr, v)
+	}
+
+	//reverse order so largest outliers appear first
+	for i := len(outliersArr)/2 - 1; i >= 0; i-- {
+		opp := len(outliersArr) - 1 - i
+		outliersArr[i], outliersArr[opp] = outliersArr[opp], outliersArr[i]
+	}
+	for i, v := range outliersArr {
+		if i == 0 || i == 1 || i == 2 {
+			s := fmt.Sprintf("%.2f", v)
+			outlierStr = outlierStr + s + "\n             "
+		}
 	}
 	//count records
 	count := len(data)
 	text := fmt.Sprintf("\nCount:       %d\nMin:         %.2f\nMean:        %.2f\nMedian:      %.2f\nMax:         %.2f\nOutliers:    %s",
-		count, min, mean, median, max, outlierstring)
+		count, min, mean, median, max, outlierStr)
 
 	return text
 }
@@ -519,18 +534,13 @@ func prepareStats(buffer *ring.Buffer) string {
 // newTextTime creates a new Text widget that displays the current time.
 func newTextOne(ctx context.Context, label string) *text.Text {
 	t := text.New()
-	go periodic(ctx, redrawInterval/1, func() error {
-		t.Reset()
+	go periodic(ctx, *redrawInterval*2, func() error {
 		pointer := plot1buf.LastLabels(1, 1)
 		value := plot1buf.Last(1, 1)
 		data := prepareStats(plot1buf)
+		t.Reset()
 		if err := t.Write(fmt.Sprintf("%s", label), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParOneTitle)))); err != nil {
 			return err
-		}
-		if *labelMode == "time" {
-			now := time.Now()
-			pointer[0] = fmt.Sprintf("%02d:%02d:%02d",
-				now.Hour(), now.Minute(), now.Second())
 		}
 		if err := t.Write(fmt.Sprintf("\nTime:        %s", pointer), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParPointer)))); err != nil {
 			return err
@@ -548,18 +558,13 @@ func newTextOne(ctx context.Context, label string) *text.Text {
 
 func newTextTwo(ctx context.Context, label string) *text.Text {
 	t := text.New()
-	go periodic(ctx, redrawInterval/5, func() error {
-		t.Reset()
+	go periodic(ctx, *redrawInterval*2, func() error {
 		pointer := plot2buf.LastLabels(1, 1)
 		value := plot2buf.Last(1, 1)
 		data := prepareStats(plot2buf)
+		t.Reset()
 		if err := t.Write(fmt.Sprintf("%s", label), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParTwoTitle)))); err != nil {
 			return err
-		}
-		if *labelMode == "time" {
-			now := time.Now()
-			pointer[0] = fmt.Sprintf("%02d:%02d:%02d",
-				now.Hour(), now.Minute(), now.Second())
 		}
 		if err := t.Write(fmt.Sprintf("\nTime:        %s", pointer), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParPointer)))); err != nil {
 			return err
@@ -577,18 +582,13 @@ func newTextTwo(ctx context.Context, label string) *text.Text {
 
 func newTextThree(ctx context.Context, label string) *text.Text {
 	t := text.New()
-	go periodic(ctx, redrawInterval/1, func() error {
-		t.Reset()
+	go periodic(ctx, *redrawInterval*2, func() error {
 		value := plot3buf.Last(1, 1)
 		data := prepareStats(plot3buf)
 		pointer := plot3buf.LastLabels(1, 1)
+		t.Reset()
 		if err := t.Write(fmt.Sprintf("%s", label), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParThreeTitle)))); err != nil {
 			return err
-		}
-		if *labelMode == "time" {
-			now := time.Now()
-			pointer[0] = fmt.Sprintf("%02d:%02d:%02d",
-				now.Hour(), now.Minute(), now.Second())
 		}
 		if err := t.Write(fmt.Sprintf("\nTime:        %s", pointer), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParPointer)))); err != nil {
 			return err
@@ -606,18 +606,14 @@ func newTextThree(ctx context.Context, label string) *text.Text {
 
 func newTextFour(ctx context.Context, label string) *text.Text {
 	t := text.New()
-	go periodic(ctx, redrawInterval/1, func() error {
-		t.Reset()
+	go periodic(ctx, *redrawInterval*2, func() error {
+
 		value := plot4buf.Last(1, 1)
 		data := prepareStats(plot4buf)
 		pointer := plot4buf.LastLabels(1, 1)
+		t.Reset()
 		if err := t.Write(fmt.Sprintf("%s", label), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParFourTitle)))); err != nil {
 			return err
-		}
-		if *labelMode == "time" {
-			now := time.Now()
-			pointer[0] = fmt.Sprintf("%02d:%02d:%02d",
-				now.Hour(), now.Minute(), now.Second())
 		}
 		if err := t.Write(fmt.Sprintf("\nTime:        %s", pointer), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParPointer)))); err != nil {
 			return err
@@ -628,23 +624,6 @@ func newTextFour(ctx context.Context, label string) *text.Text {
 		if err := t.Write(fmt.Sprintf("%s", data), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParText)))); err != nil {
 			return err
 		}
-		return nil
-	})
-	return t
-}
-
-// newTextTime creates a new Text widget that displays the current time.
-func newTextFourEx(ctx context.Context, label string) *text.Text {
-	t := text.New()
-	go periodic(ctx, redrawInterval/1, func() error {
-		//pointer := plot4buf.LastLabels(1, 1)
-		t.Reset()
-		//data := prepareStats(label, pointer, plot4buf.Buffer())
-		//fmt.Println("Paragraph Text", data)
-		//txt := time.Now().UTC().Format(time.UnixDate)
-		//if err := t.Write(fmt.Sprintf("\n%s", data), text.WriteCellOpts(cell.FgColor(cell.ColorMagenta))); err != nil {
-		//	return err
-		//}
 		return nil
 	})
 	return t
@@ -661,12 +640,28 @@ func sineInputs() []float64 {
 	return res
 }
 
+func readDataChannel(ctx context.Context) {
+	go periodic(ctx, *seekInterval, func() error {
+		var records []string
+		//remove a record from the channel
+		if *debug {
+			fmt.Println("DEBUG:\tRemoving record from channel.")
+		}
+		records = <-dataChan
+		//add record to the buffer
+		if *debug {
+			fmt.Println("DEBUG:\tParsing line record:", records)
+		}
+		parsePlotData(records)
+		return nil
+	})
+}
+
 // newSines returns a line chart that displays multiple sine series.
 func newPlotOne(ctx context.Context) *linechart.LineChart {
 	termWidth, termHeight := ui.TerminalDimensions()
 	//set termWidth to actual width of linechart 85% of screen
-	//termWidth = int((float64(termWidth) * float64(0.30)))
-	termWidth = 20
+	termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
 
 	lc := linechart.New(
 		linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
@@ -674,14 +669,10 @@ func newPlotOne(ctx context.Context) *linechart.LineChart {
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
 	)
 	//step1 := 0
-	go periodic(ctx, redrawInterval/1, func() error {
+	go periodic(ctx, time.Duration(10*time.Millisecond), func() error {
 		var inputs []float64
 		var inputLabels []string
-		var records []string
-		//remove a record from the channel
-		records = <-dataChan
-		//add record to the buffer
-		parsePlotData(records)
+
 		inputs = plot1buf.Last(termHeight, termWidth)
 		inputLabels = plot1buf.LastLabels(termHeight, termWidth)
 		var labelMap = map[int]string{}
@@ -689,9 +680,8 @@ func newPlotOne(ctx context.Context) *linechart.LineChart {
 			labelMap[i] = x
 		}
 		if *debug {
-			fmt.Println("Channel Value:", records)
-			fmt.Println("Data Plot 1 Data:", plot1buf.Last(termHeight, termWidth))
-			fmt.Println("Data Plot 1 Data Labels:", plot1buf.LastLabels(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 1 Data:", plot1buf.Last(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 1 Data Labels:", plot1buf.LastLabels(termHeight, termWidth))
 		}
 		//step1 = (step1 + 1) % len(inputs)
 		if err := lc.Series("first", inputs,
@@ -710,27 +700,35 @@ func newPlotOne(ctx context.Context) *linechart.LineChart {
 func newPlotTwo(ctx context.Context) *linechart.LineChart {
 	termWidth, termHeight := ui.TerminalDimensions()
 	//set termWidth to actual width of linechart 85% of screen
-	termWidth = int((float64(termWidth) * float64(0.90)))
-	termWidth = 20
-
+	termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
 	lc := linechart.New(
 		linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
 		linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphYLabels))),
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
 	)
 	//step1 := 0
-	go periodic(ctx, redrawInterval/1, func() error {
+	go periodic(ctx, *redrawInterval/1, func() error {
 		var inputs []float64
 		var inputLabels []string
 		inputs = plot2buf.Last(termHeight, termWidth)
 		inputLabels = plot2buf.LastLabels(termHeight, termWidth)
-		var labelMap = map[int]string{}
-		for i, x := range inputLabels {
-			labelMap[i] = x
+		//add every other label
+		//y := inputLabels[:0]
+		//for i, n := range inputLabels {
+		//	if i%5 != 0 {
+		//		y = append(y, n)
+		//	}
+		//}
+
+		labelMap := make(map[int]string)
+		for i, s := range inputLabels {
+			labelMap[i] = s
 		}
+
 		if *debug {
-			fmt.Println("Data Plot 2 Data:", plot2buf.Last(termHeight, termWidth))
-			fmt.Println("Data Plot 2 Data Labels:", plot2buf.LastLabels(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 2 Label Map:", labelMap)
+			fmt.Println("DEBUG:\tData Plot 2 Data:", plot2buf.Last(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 2 Data Labels:", plot2buf.LastLabels(termHeight, termWidth))
 		}
 		//step1 = (step1 + 1) % len(inputs)
 		if err := lc.Series("first", inputs,
@@ -749,8 +747,7 @@ func newPlotTwo(ctx context.Context) *linechart.LineChart {
 func newPlotThree(ctx context.Context) *linechart.LineChart {
 	termWidth, termHeight := ui.TerminalDimensions()
 	//set termWidth to actual width of linechart 85% of screen
-	termWidth = int((float64(termWidth) * float64(0.80)))
-	termWidth = 20
+	termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
 
 	lc := linechart.New(
 		linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
@@ -758,7 +755,7 @@ func newPlotThree(ctx context.Context) *linechart.LineChart {
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
 	)
 	//step1 := 0
-	go periodic(ctx, redrawInterval/1, func() error {
+	go periodic(ctx, *redrawInterval/1, func() error {
 		var inputs []float64
 		var inputLabels []string
 		inputs = plot3buf.Last(termHeight, termWidth)
@@ -768,8 +765,8 @@ func newPlotThree(ctx context.Context) *linechart.LineChart {
 			labelMap[i] = x
 		}
 		if *debug {
-			fmt.Println("Data Plot 3 Data:", plot3buf.Last(termHeight, termWidth))
-			fmt.Println("Data Plot 3 Data Labels:", plot3buf.LastLabels(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 3 Data:", plot3buf.Last(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 3 Data Labels:", plot3buf.LastLabels(termHeight, termWidth))
 		}
 		//step1 = (step1 + 1) % len(inputs)
 		if err := lc.Series("first", inputs,
@@ -788,8 +785,7 @@ func newPlotThree(ctx context.Context) *linechart.LineChart {
 func newPlotFour(ctx context.Context) *linechart.LineChart {
 	termWidth, termHeight := ui.TerminalDimensions()
 	//set termWidth to actual width of linechart 85% of screen
-	termWidth = int((float64(termWidth) * float64(0.70)))
-	termWidth = 20
+	termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
 
 	lc := linechart.New(
 		linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
@@ -797,7 +793,7 @@ func newPlotFour(ctx context.Context) *linechart.LineChart {
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
 	)
 	//step1 := 0
-	go periodic(ctx, redrawInterval/1, func() error {
+	go periodic(ctx, *redrawInterval/1, func() error {
 		var inputs []float64
 		var inputLabels []string
 		inputs = plot4buf.Last(termHeight, termWidth)
@@ -807,8 +803,8 @@ func newPlotFour(ctx context.Context) *linechart.LineChart {
 			labelMap[i] = x
 		}
 		if *debug {
-			fmt.Println("Data Plot 4 Data:", plot4buf.Last(termHeight, termWidth))
-			fmt.Println("Data Plot 4 Data Labels:", plot4buf.LastLabels(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 4 Data:", plot4buf.Last(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 4 Data Labels:", plot4buf.LastLabels(termHeight, termWidth))
 		}
 		//step1 = (step1 + 1) % len(inputs)
 		if err := lc.Series("first", inputs,
@@ -855,12 +851,13 @@ func main() {
 	reset := true
 	slower := false
 	faster := false
+	interrupt := false
 
 	// Parse args and assign values
 	kingpin.Version("0.0.1")
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	if *debug {
-		fmt.Printf("Running with: Delimiter: '%s' lineMode: %s labelMode: %s graphMode: %s\n", *delimiter, *lineMode, *labelMode, *graphMode)
+		fmt.Printf("DEBUG:\tRunning with: Delimiter: '%s'\nlabelMode: %s\nReDraw Interval: %s\nSeek Interval: %s\n	", *delimiter, *labelMode, *redrawInterval, *seekInterval)
 	}
 	//define the reader type (Stdin or File based)
 	var reader *csv.Reader
@@ -893,21 +890,25 @@ func main() {
 
 	//print data
 	if *debug {
-		fmt.Println("Records Array:", records)
-		fmt.Println("Number of Graphs:", graphs)
-		fmt.Println("Labels Array:", labels)
+		fmt.Println("DEBUG:\tRecords Array:", records)
+		fmt.Println("DEBUG:\tNumber of Graphs:", graphs)
+		fmt.Println("DEBUG:\tLabels Array:", labels)
 	}
 	// read from Reader (Stdin or File) into a dataChan
 	go func() {
 		for {
-			if faster == true {
-				time.Sleep(10 * time.Millisecond)
-			}
 			if reset == true {
-				time.Sleep(250 * time.Millisecond)
+				//time.Sleep(*seekInterval * 1)
+			}
+			if faster == true {
+				//time.Sleep(*seekInterval * 1)
+
+				//	seekInterval = time.Duration(50*time.Millisecond) * time.Duration(*readInterval)
+				//	redrawInterval = time.Duration(50*time.Millisecond) * time.Duration(*drawInterval)
 			}
 			if slower == true {
-				time.Sleep(1000 * time.Millisecond)
+				time.Sleep(*seekInterval * 5)
+				//time.Sleep(500 * time.Millisecond)
 			}
 			if interrupt == true {
 				time.Sleep(10 * time.Second)
@@ -922,52 +923,52 @@ func main() {
 			}
 			dataChan <- r
 		}
-	}()
-	////////////// END READ FROM STDIN OR FILE ///////////////////
+	}() //end read from stdin/file
+
 	//initialize the ring buffer
 	initBuffer(records)
+	//Initialize termbox in 256 color mode
+	t, err := termbox.New(termbox.ColorMode(terminalapi.ColorMode256))
+	if err != nil {
+		panic(err)
+	}
+	defer t.Close()
 
-	if *debug == false {
-		//Initialize termbox in 256 color mode
-		t, err := termbox.New(termbox.ColorMode(terminalapi.ColorMode256))
-		if err != nil {
-			panic(err)
+	//configure the box / graph layout
+	ctx, cancel := context.WithCancel(context.Background())
+	c, err := layout(ctx, t, labels)
+	if err != nil {
+		panic(err)
+	}
+	//start reading from the data channel
+	readDataChannel(ctx)
+	//listen for keyboard events
+	keyboardevents := func(k *terminalapi.Keyboard) {
+		if k.Key == 'q' || k.Key == 'Q' {
+			cancel()
 		}
-		defer t.Close()
-
-		//configure the box / graph layout
-		ctx, cancel := context.WithCancel(context.Background())
-		c, err := layout(ctx, t, labels)
-		if err != nil {
-			panic(err)
+		if k.Key == keyboard.KeyArrowLeft || k.Key == 'f' {
+			slower = true
+			faster = false
+			reset = false
 		}
-		//listen for keyboard events
-		keyboardevents := func(k *terminalapi.Keyboard) {
-			if k.Key == 'q' || k.Key == 'Q' {
-				cancel()
-			}
-			if k.Key == keyboard.KeyArrowLeft || k.Key == 'f' {
-				slower = true
-				faster = false
-			}
-			if k.Key == keyboard.KeyArrowRight || k.Key == 's' {
-				faster = true
-				slower = false
-			}
-			if k.Key == 'p' {
-				interrupt = true
-				slower = false
-				faster = false
-			}
-			if k.Key == keyboard.KeySpace {
-				reset = true
-				slower = false
-				faster = false
-			}
+		if k.Key == keyboard.KeyArrowRight || k.Key == 's' {
+			faster = true
+			slower = false
+			reset = false
 		}
-		if err := termdash.Run(ctx, t, c, termdash.KeyboardSubscriber(keyboardevents), termdash.RedrawInterval(redrawInterval)); err != nil {
-			panic(err)
+		if k.Key == 'p' {
+			interrupt = true
+			slower = false
+			faster = false
+		}
+		if k.Key == keyboard.KeySpace {
+			reset = true
+			slower = false
+			faster = false
 		}
 	}
-
-}
+	if err := termdash.Run(ctx, t, c, termdash.KeyboardSubscriber(keyboardevents), termdash.RedrawInterval(*redrawInterval)); err != nil {
+		panic(err)
+	}
+} //end main
