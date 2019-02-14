@@ -1,9 +1,10 @@
 package datadash
 
 type Buffer struct {
-	Data       *float64RingBuffer
-	DataLabels *stringRingBuffer
-	Container  []float64
+	Data           *float64RingBuffer
+	DataLabels     *stringRingBuffer
+	Container      []float64
+	LabelContainer []string
 }
 
 func NewBuffer(bufsize int) *Buffer {
@@ -55,9 +56,12 @@ func (lc *Buffer) Add(x float64, dataLabel string) {
 	if dataLabel != "" {
 		//fmt.Println("Buffer Label Value:", dataLabel)
 		lc.DataLabels.Add(dataLabel)
+		lc.updateContainer(x, dataLabel)
 		//fmt.Println("Buffer Label Value Added:", dataLabel)
+	} else {
+		lc.DataLabels.Add("-")
+		lc.updateContainer(x, "-")
 	}
-	lc.updateContainer(x)
 }
 
 func (lc *Buffer) Update(xs []float64, dataLabels []string) {
@@ -79,11 +83,12 @@ func (lc *Buffer) Clear() {
 	lc.Update(nil, nil)
 }
 
-func (lc *Buffer) updateContainer(value float64) {
+func (lc *Buffer) updateContainer(value float64, label string) {
 	defer func() {
 		recover()
 	}()
 	lc.Container = append(lc.Container, value)
+	lc.LabelContainer = append(lc.LabelContainer, label)
 	//if lc.Mode == "dot" {
 	//data := lc.Data.Last(2 * 100)
 	//lc.Plot.Data[0] = data

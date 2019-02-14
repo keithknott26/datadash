@@ -39,6 +39,7 @@ var (
 	seekInterval   = app.Flag("seek-interval", "The interval at which records (lines) are read from the datasource: (100ms,250ms,1s,5s..)").Short('l').Default("100ms").Duration()
 	inputFile      = app.Arg("input file", "A file containing a label header, and data in columns separated by delimiter 'd'.\nData piped from Stdin uses the same format").File()
 
+	plot0buf *ring.Buffer
 	plot1buf *ring.Buffer
 	plot2buf *ring.Buffer
 	plot3buf *ring.Buffer
@@ -115,67 +116,167 @@ var (
 )
 
 func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*container.Container, error) {
-	if graphs == 1 {
-		FirstRow := []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParOneBorder)),
-					container.PlaceWidget(newTextOne(ctx, labels[1])),
-				),
-				container.Right(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle(labels[1]+" - 'q' Quit 'p' Pause 10s <- Slower | Faster -> "),
-					container.BorderColor(cell.ColorNumber(GraphOneBorder)),
-					container.PlaceWidget(newPlotOne(ctx)),
-				),
-				container.SplitPercent(15),
+	var labels0 string
+	var labels1 string
+	var labels2 string
+	var labels3 string
+	var labels4 string
+	if graphs == 0 && *labelMode == "time" {
+		labels0 = "Streaming Data..."
+		labels1 = "Empty"
+		labels2 = "Empty"
+		labels3 = "Empty"
+		labels4 = "Empty"
+	} else if graphs == 1 {
+		labels0 = labels[0]
+		labels1 = labels[1]
+		labels2 = "Empty"
+		labels3 = "Empty"
+		labels4 = "Empty"
+	} else if graphs == 2 {
+		labels0 = labels[0]
+		labels1 = labels[1]
+		labels2 = labels[2]
+		labels3 = "Empty"
+		labels4 = "Empty"
+	} else if graphs == 3 {
+		labels0 = labels[0]
+		labels1 = labels[1]
+		labels2 = labels[2]
+		labels3 = labels[3]
+		labels4 = "Empty"
+	} else if graphs == 4 {
+		labels0 = labels[0]
+		labels1 = labels[1]
+		labels2 = labels[2]
+		labels3 = labels[3]
+		labels4 = labels[4]
+	}
+	StreamingDataRow := []container.Option{
+		container.SplitVertical(
+			container.Left(
+				container.Border(draw.LineStyleLight),
+				container.BorderTitle("Statistics"),
+				container.BorderTitleAlignCenter(),
+				container.BorderColor(cell.ColorNumber(ParOneBorder)),
+				container.PlaceWidget(newTextOne(ctx, labels0)),
 			),
+			container.Right(
+				container.Border(draw.LineStyleLight),
+				container.BorderTitle(labels0+" - 'q' Quit 'p' Pause 10s <- Slow | Resume -> "),
+				container.BorderColor(cell.ColorNumber(GraphOneBorder)),
+				container.PlaceWidget(newPlotStreamingData(ctx)),
+			),
+			container.SplitPercent(15),
+		),
+	}
+	FirstRow := []container.Option{
+		container.SplitVertical(
+			container.Left(
+				container.Border(draw.LineStyleLight),
+				container.BorderTitle("Statistics"),
+				container.BorderTitleAlignCenter(),
+				container.BorderColor(cell.ColorNumber(ParOneBorder)),
+				container.PlaceWidget(newTextOne(ctx, labels1)),
+			),
+			container.Right(
+				container.Border(draw.LineStyleLight),
+				container.BorderTitle(labels1+" - 'q' Quit 'p' Pause 10s <- Slow | Resume -> "),
+				container.BorderColor(cell.ColorNumber(GraphOneBorder)),
+				container.PlaceWidget(newPlotOne(ctx)),
+			),
+			container.SplitPercent(15),
+		),
+	}
+	SecondRow := []container.Option{
+		container.SplitVertical(
+			container.Left(
+				container.Border(draw.LineStyleLight),
+				container.BorderTitle("Statistics"),
+				container.BorderTitleAlignCenter(),
+				container.BorderColor(cell.ColorNumber(ParTwoBorder)),
+				container.PlaceWidget(newTextTwo(ctx, labels2)),
+			),
+			container.Right(
+				container.Border(draw.LineStyleLight),
+				container.BorderTitle(labels2+" - 'q' Quit 'p' Pause 10s <- Slow | Resume -> "),
+				container.BorderColor(cell.ColorNumber(GraphTwoBorder)),
+				container.PlaceWidget(newPlotTwo(ctx)),
+			),
+			container.SplitPercent(15),
+		),
+	}
+	TopHalf := []container.Option{
+		container.SplitHorizontal(
+			container.Top(FirstRow...),
+			container.Bottom(SecondRow...),
+			container.SplitPercent(50),
+		),
+	}
+	ThirdRow := []container.Option{
+		container.SplitVertical(
+			container.Left(
+				container.Border(draw.LineStyleLight),
+				container.BorderTitle("Statistics"),
+				container.BorderTitleAlignCenter(),
+				container.BorderColor(cell.ColorNumber(ParThreeBorder)),
+				container.PlaceWidget(newTextThree(ctx, labels3)),
+			),
+			container.Right(
+				container.Border(draw.LineStyleLight),
+				container.BorderTitle(labels3+" - 'q' Quit 'p' Pause 10s <- Slow | Resume -> "),
+				container.BorderColor(cell.ColorNumber(GraphThreeBorder)),
+				container.PlaceWidget(newPlotThree(ctx)),
+			),
+			container.SplitPercent(15),
+		),
+	}
+
+	FourthRow := []container.Option{
+		container.SplitVertical(
+			container.Left(
+				container.Border(draw.LineStyleLight),
+				container.BorderTitle("Statistics"),
+				container.BorderTitleAlignCenter(),
+				container.BorderColor(cell.ColorNumber(ParFourBorder)),
+				container.PlaceWidget(newTextFour(ctx, labels4)),
+			),
+			container.Right(
+				container.Border(draw.LineStyleLight),
+				container.BorderTitle(labels4+" - 'q' Quit 'p' Pause 10s <- Slow | Resume -> "),
+				container.BorderColor(cell.ColorNumber(GraphFourBorder)),
+				container.PlaceWidget(newPlotFour(ctx)),
+			),
+			container.SplitPercent(15),
+		),
+	}
+	BottomHalf := []container.Option{
+		container.SplitHorizontal(
+			container.Top(ThirdRow...),
+			container.Bottom(FourthRow...),
+			container.SplitPercent(50),
+		),
+	}
+	AllRows := []container.Option{
+		container.SplitHorizontal(
+			container.Top(TopHalf...),
+			container.Bottom(BottomHalf...),
+			container.SplitPercent(50),
+		),
+	}
+	if graphs == 0 && *labelMode == "time" {
+		c, err := container.New(t, StreamingDataRow...)
+		if err != nil {
+			return nil, err
 		}
+		return c, nil
+	} else if graphs == 1 {
 		c, err := container.New(t, FirstRow...)
 		if err != nil {
 			return nil, err
 		}
 		return c, nil
 	} else if graphs == 2 {
-		FirstRow := []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParOneBorder)),
-					container.PlaceWidget(newTextOne(ctx, labels[1])),
-				),
-				container.Right(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle(labels[1]+" - 'q' Quit 'p' Pause 10s <- Slower | Faster -> "),
-					container.BorderColor(cell.ColorNumber(GraphOneBorder)),
-					container.PlaceWidget(newPlotOne(ctx)),
-				),
-				container.SplitPercent(15),
-			),
-		}
-		SecondRow := []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParTwoBorder)),
-					container.PlaceWidget(newTextTwo(ctx, labels[2])),
-				),
-				container.Right(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle(labels[2]+" - 'q' Quit 'p' Pause 10s <- Slower | Faster -> "),
-					container.BorderColor(cell.ColorNumber(GraphTwoBorder)),
-					container.PlaceWidget(newPlotTwo(ctx)),
-				),
-				container.SplitPercent(15),
-			),
-		}
 		c, err := container.New(
 			t,
 			container.SplitHorizontal(
@@ -188,68 +289,8 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 			return nil, err
 		}
 		return c, nil
+
 	} else if graphs == 3 {
-		FirstRow := []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParOneBorder)),
-					container.PlaceWidget(newTextOne(ctx, labels[1])),
-				),
-				container.Right(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle(labels[1]+" - 'q' Quit 'p' Pause 10s <- Slower | Faster -> "),
-					container.BorderColor(cell.ColorNumber(GraphOneBorder)),
-					container.PlaceWidget(newPlotOne(ctx)),
-				),
-				container.SplitPercent(15),
-			),
-		}
-		SecondRow := []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParTwoBorder)),
-					container.PlaceWidget(newTextTwo(ctx, labels[2])),
-				),
-				container.Right(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle(labels[2]+" - 'q' Quit 'p' Pause 10s <- Slower | Faster -> "),
-					container.BorderColor(cell.ColorNumber(GraphTwoBorder)),
-					container.PlaceWidget(newPlotTwo(ctx)),
-				),
-				container.SplitPercent(15),
-			),
-		}
-		TopHalf := []container.Option{
-			container.SplitHorizontal(
-				container.Top(FirstRow...),
-				container.Bottom(SecondRow...),
-				container.SplitPercent(50),
-			),
-		}
-		ThirdRow := []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParThreeBorder)),
-					container.PlaceWidget(newTextThree(ctx, labels[3])),
-				),
-				container.Right(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle(labels[3]+" - 'q' Quit 'p' Pause 10s <- Slower | Faster -> "),
-					container.BorderColor(cell.ColorNumber(GraphThreeBorder)),
-					container.PlaceWidget(newPlotThree(ctx)),
-				),
-				container.SplitPercent(15),
-			),
-		}
 		c, err := container.New(
 			t,
 			container.SplitHorizontal(
@@ -263,99 +304,6 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 		}
 		return c, nil
 	} else if graphs == 4 {
-		FirstRow := []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParOneBorder)),
-					container.PlaceWidget(newTextOne(ctx, labels[1])),
-				),
-				container.Right(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle(labels[1]+" - 'q' Quit 'p' Pause 10s <- Slower | Faster -> "),
-					container.BorderColor(cell.ColorNumber(GraphOneBorder)),
-					container.PlaceWidget(newPlotOne(ctx)),
-				),
-				container.SplitPercent(15),
-			),
-		}
-		SecondRow := []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParTwoBorder)),
-					container.PlaceWidget(newTextTwo(ctx, labels[2])),
-				),
-				container.Right(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle(labels[2]+" - 'q' Quit 'p' Pause 10s <- Slower | Faster -> "),
-					container.BorderColor(cell.ColorNumber(GraphTwoBorder)),
-					container.PlaceWidget(newPlotTwo(ctx)),
-				),
-				container.SplitPercent(15),
-			),
-		}
-		TopHalf := []container.Option{
-			container.SplitHorizontal(
-				container.Top(FirstRow...),
-				container.Bottom(SecondRow...),
-				container.SplitPercent(50),
-			),
-		}
-		ThirdRow := []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParThreeBorder)),
-					container.PlaceWidget(newTextThree(ctx, labels[3])),
-				),
-				container.Right(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle(labels[3]+" - 'q' Quit 'p' Pause 10s <- Slower | Faster -> "),
-					container.BorderColor(cell.ColorNumber(GraphThreeBorder)),
-					container.PlaceWidget(newPlotThree(ctx)),
-				),
-				container.SplitPercent(15),
-			),
-		}
-		FourthRow := []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParFourBorder)),
-					container.PlaceWidget(newTextFour(ctx, labels[4])),
-				),
-				container.Right(
-					container.Border(draw.LineStyleLight),
-					container.BorderTitle(labels[4]+" - 'q' Quit 'p' Pause 10s <- Slower | Faster -> "),
-					container.BorderColor(cell.ColorNumber(GraphFourBorder)),
-					container.PlaceWidget(newPlotFour(ctx)),
-				),
-				container.SplitPercent(15),
-			),
-		}
-		BottomHalf := []container.Option{
-			container.SplitHorizontal(
-				container.Top(ThirdRow...),
-				container.Bottom(FourthRow...),
-				container.SplitPercent(50),
-			),
-		}
-		AllRows := []container.Option{
-			container.SplitHorizontal(
-				container.Top(TopHalf...),
-				container.Bottom(BottomHalf...),
-				container.SplitPercent(50),
-			),
-		}
 		c, err := container.New(
 			t,
 			AllRows...,
@@ -365,9 +313,10 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 		}
 		return c, nil
 	} else {
-		err := "Error: This app needs a minimum of 2 columns 'HH:MM<tab>value' with a header record 'time<tab>xlabel', with a Max of 5 total columns!"
+		err := "\n\nError: This app wants a minimum of 2 columns and a maximum of 5 columns. You must include a header record:\n\n\t\tHeader record:\tIgnored<delimiter>Title\n\t\tData Row:\tX-Label<delimiter>Y-value\n\n\n\nExample:  \n\t\ttime\tADL Inserts\n\t\t00:01\t493\n\t\t00:02\t353\n\t\t00:03\t380\n\nExample:\n\t\tcol1\tcol2\n\t\t1\t493\n\t\t2\t353\n\t\t3\t321\n"
 		panic(err)
 	}
+
 	//if no matches the return nil
 
 }
@@ -381,8 +330,14 @@ func initBuffer(records []string) {
 }
 
 func parsePlotData(records []string) {
-	label := records[0]
-	record := records[1:]
+	var label string
+	var record []string
+	if graphs == 0 {
+		record = records[0:]
+	} else {
+		label = records[0]
+		record = records[1:]
+	}
 	if *labelMode == "time" {
 		//Use the time as a X-Axis labels
 		now := time.Now()
@@ -390,6 +345,9 @@ func parsePlotData(records []string) {
 	}
 
 	for i, x := range record {
+		if *debug {
+			fmt.Println("DEBUG:\tFull Record:", record)
+		}
 		if i == 0 {
 			if *debug {
 				fmt.Println("DEBUG:\tRecord[0]:", record[i])
@@ -657,7 +615,46 @@ func readDataChannel(ctx context.Context) {
 	})
 }
 
-// newSines returns a line chart that displays multiple sine series.
+// returns a line chart that displays data from column 2
+func newPlotStreamingData(ctx context.Context) *linechart.LineChart {
+	termWidth, termHeight := ui.TerminalDimensions()
+	//set termWidth to actual width of linechart 85% of screen
+	termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
+
+	lc := linechart.New(
+		linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
+		linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphYLabels))),
+		linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
+	)
+	//step1 := 0
+	go periodic(ctx, time.Duration(10*time.Millisecond), func() error {
+		var inputs []float64
+		var inputLabels []string
+
+		inputs = plot1buf.Last(termHeight, termWidth)
+		inputLabels = plot1buf.LastLabels(termHeight, termWidth)
+		var labelMap = map[int]string{}
+		for i, x := range inputLabels {
+			labelMap[i] = x
+		}
+		if *debug {
+			fmt.Println("DEBUG:\tData Plot 1 Data (Streaming Data):", plot1buf.Last(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 1 Data Labels (Streaming Data):", plot1buf.LastLabels(termHeight, termWidth))
+		}
+		//step1 = (step1 + 1) % len(inputs)
+		if err := lc.Series("first", inputs,
+			linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLineOne))),
+			linechart.SeriesXLabels(labelMap),
+		); err != nil {
+			return err
+		}
+
+		return nil
+	})
+	return lc
+}
+
+// returns a line chart that displays data from column 2
 func newPlotOne(ctx context.Context) *linechart.LineChart {
 	termWidth, termHeight := ui.TerminalDimensions()
 	//set termWidth to actual width of linechart 85% of screen
@@ -857,7 +854,7 @@ func main() {
 	kingpin.Version("0.0.1")
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	if *debug {
-		fmt.Printf("DEBUG:\tRunning with: Delimiter: '%s'\nlabelMode: %s\nReDraw Interval: %s\nSeek Interval: %s\n	", *delimiter, *labelMode, *redrawInterval, *seekInterval)
+		fmt.Printf("DEBUG:\tRunning with: Delimiter: '%s'\nlabelMode: %s\nReDraw Interval: %s\nSeek Interval: %s\n", *delimiter, *labelMode, *redrawInterval, *seekInterval)
 	}
 	//define the reader type (Stdin or File based)
 	var reader *csv.Reader
