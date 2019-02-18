@@ -13,7 +13,6 @@ import (
 	"time"
 
 	termutil "github.com/andrew-d/go-termutil"
-	ui "github.com/gizak/termui"
 	"github.com/montanaflynn/stats"
 	"github.com/mum4k/termdash"
 	"github.com/mum4k/termdash/cell"
@@ -35,6 +34,8 @@ var (
 	delimiter      = app.Flag("delimiter", "Record Delimiter:").Short('d').Default("\t").String()
 	labelMode      = app.Flag("label-mode", "X-Axis Labels: 'first' (use the first record in the column) or 'time' (use the current time)").Short('m').Default("first").String()
 	hScale         = app.Flag("horizontal-scale", "Horizontal Graph Scale (Line graph width * X): (1,2,3,...)").Short('h').Default("1").Int()
+	avgLine        = app.Flag("average-line", "Enables the line representing the average of values").Short('a').Bool()
+	avgSeek        = app.Flag("average-seek", "The number of values to consider when displaying the average line: (50,100,500...)").Short('s').Default("500").Int()
 	redrawInterval = app.Flag("redraw-interval", "The interval at which objects on the screen are redrawn: (100ms,250ms,1s,5s..)").Short('r').Default("100ms").Duration()
 	seekInterval   = app.Flag("seek-interval", "The interval at which records (lines) are read from the datasource: (100ms,250ms,1s,5s..)").Short('l').Default("100ms").Duration()
 	inputFile      = app.Arg("input file", "A file containing a label header, and data in columns separated by delimiter 'd'.\nData piped from Stdin uses the same format").File()
@@ -51,8 +52,6 @@ var (
 	dataChan      = make(chan []string, 5)
 	labels        = make([]string, 0, 10)
 	graphs        = 1
-	termWidth     = 1
-	termHeight    = 1
 	linchartWidth = 1
 	drawOffset    = 1
 	//speed controls
@@ -98,8 +97,6 @@ var (
 	ParText          = 3
 	ParPointer       = 248
 	ParValue         = 15
-	LineLow          = 2
-	LineHigh         = 1
 	GraphOneBorder   = 25
 	GraphTwoBorder   = 25
 	GraphThreeBorder = 25
@@ -108,6 +105,9 @@ var (
 	GraphXLabels     = 248
 	GraphYLabels     = 15
 	GraphTitles      = 2
+	LineLow          = 235
+	LineAvg          = 235
+	LineHigh         = 239
 	GraphLineOne     = 82
 	GraphLineTwo     = 13
 	GraphLineThree   = 45
@@ -358,7 +358,7 @@ func parsePlotData(records []string) {
 				fmt.Println("DEBUG:\tLabel Value:", label)
 			}
 			val, _ := strconv.ParseFloat(strings.TrimSpace(record[i]), 64)
-			plot1buf.Add(val, label)
+			plot1buf.Add(val, label, *avgSeek)
 		}
 		if i == 1 {
 			if *debug {
@@ -368,7 +368,7 @@ func parsePlotData(records []string) {
 				fmt.Println("DEBUG:\tLabel Value:", label)
 			}
 			val, _ := strconv.ParseFloat(strings.TrimSpace(record[i]), 64)
-			plot2buf.Add(val, label)
+			plot2buf.Add(val, label, *avgSeek)
 		}
 		if i == 2 {
 			if *debug {
@@ -378,7 +378,7 @@ func parsePlotData(records []string) {
 				fmt.Println("DEBUG:\tLabel Value:", label)
 			}
 			val, _ := strconv.ParseFloat(strings.TrimSpace(record[i]), 64)
-			plot3buf.Add(val, label)
+			plot3buf.Add(val, label, *avgSeek)
 		}
 		if i == 3 {
 			if *debug {
@@ -388,62 +388,20 @@ func parsePlotData(records []string) {
 				fmt.Println("DEBUG:\tLabel Value:", label)
 			}
 			val, _ := strconv.ParseFloat(strings.TrimSpace(record[i]), 64)
-			plot4buf.Add(val, label)
+			plot4buf.Add(val, label, *avgSeek)
 		}
 	}
 	if *debug {
-		fmt.Println("DEBUG:\tBuffer Data[1]: ", plot1buf.Last(100, 100))
-		fmt.Println("DEBUG:\tBuffer Lables[1]: ", plot1buf.LastLabels(100, 100))
-		fmt.Println("DEBUG:\tBuffer Data[2]: ", plot2buf.Last(100, 100))
-		fmt.Println("DEBUG:\tBuffer Lables[2]: ", plot2buf.LastLabels(100, 100))
-		fmt.Println("DEBUG:\tBuffer Data[3]: ", plot3buf.Last(100, 100))
-		fmt.Println("DEBUG:\tBuffer Lables[3]: ", plot3buf.LastLabels(100, 100))
-		fmt.Println("DEBUG:\tBuffer Data[4]: ", plot4buf.Last(100, 100))
-		fmt.Println("DEBUG:\tBuffer Lables[4]: ", plot4buf.LastLabels(100, 100))
+		fmt.Println("DEBUG:\tBuffer Data[1]: ", plot1buf.Last(100))
+		fmt.Println("DEBUG:\tBuffer Lables[1]: ", plot1buf.LastLabels(100))
+		fmt.Println("DEBUG:\tBuffer Data[2]: ", plot2buf.Last(100))
+		fmt.Println("DEBUG:\tBuffer Lables[2]: ", plot2buf.LastLabels(100))
+		fmt.Println("DEBUG:\tBuffer Data[3]: ", plot3buf.Last(100))
+		fmt.Println("DEBUG:\tBuffer Lables[3]: ", plot3buf.LastLabels(100))
+		fmt.Println("DEBUG:\tBuffer Data[4]: ", plot4buf.Last(100))
+		fmt.Println("DEBUG:\tBuffer Lables[4]: ", plot4buf.LastLabels(100))
 
 	}
-}
-
-// newLinechart returns a line chart that displays a heartbeat-like progression.
-func newLinechart(ctx context.Context) *linechart.LineChart {
-	var inputs []float64
-
-	termWidth, termHeight := ui.TerminalDimensions()
-	//set termWidth to actual width of linechart 83% of screen
-	termWidth = int((float64(termWidth)*float64(0.83) - 3))
-	data1 := plot1buf.Last(termHeight, termWidth)
-	for i := 0; i < 100; i++ {
-		v := math.Pow(math.Sin(float64(i)), 63) * math.Sin(float64(i)+1.5) * 8
-		inputs = append(inputs, v)
-	}
-	//	strings := []string{"1", "2", "3", "4"}
-	//	dataChan <- strings
-
-	//for record := range dataChan {
-	//	x, _ := strconv.ParseFloat(record[0], 64)
-	//	inputs = append(inputs, x)
-	//		fmt.Println(record)
-	//}
-	lc := linechart.New(
-		linechart.AxesCellOpts(cell.FgColor(cell.ColorRed)),
-		linechart.YLabelCellOpts(cell.FgColor(cell.ColorGreen)),
-		linechart.XLabelCellOpts(cell.FgColor(cell.ColorGreen)),
-	)
-	fmt.Println("DEBUG:\tFloat Values", data1)
-	step := 0
-	go periodic(ctx, *redrawInterval/10, func() error {
-		step = (step + 1) % len(inputs)
-		if err := lc.Series("heartbeat", inputs,
-			linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(87))),
-			linechart.SeriesXLabels(map[int]string{
-				0: "zero",
-			}),
-		); err != nil {
-			return err
-		}
-		return nil
-	})
-	return lc
 }
 
 //calulate data stats
@@ -493,10 +451,10 @@ func prepareStats(buffer *ring.Buffer) string {
 
 // newTextTime creates a new Text widget that displays the current time.
 func newTextOne(ctx context.Context, label string) *text.Text {
-	t := text.New()
+	t, _ := text.New()
 	go periodic(ctx, *redrawInterval*2, func() error {
-		pointer := plot1buf.LastLabels(1, 1)
-		value := plot1buf.Last(1, 1)
+		pointer := plot1buf.LastLabels(1)
+		value := plot1buf.Last(1)
 		data := prepareStats(plot1buf)
 		t.Reset()
 		if err := t.Write(fmt.Sprintf("%s", label), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParOneTitle)))); err != nil {
@@ -517,10 +475,10 @@ func newTextOne(ctx context.Context, label string) *text.Text {
 }
 
 func newTextTwo(ctx context.Context, label string) *text.Text {
-	t := text.New()
+	t, _ := text.New()
 	go periodic(ctx, *redrawInterval*2, func() error {
-		pointer := plot2buf.LastLabels(1, 1)
-		value := plot2buf.Last(1, 1)
+		pointer := plot2buf.LastLabels(1)
+		value := plot2buf.Last(1)
 		data := prepareStats(plot2buf)
 		t.Reset()
 		if err := t.Write(fmt.Sprintf("%s", label), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParTwoTitle)))); err != nil {
@@ -541,11 +499,11 @@ func newTextTwo(ctx context.Context, label string) *text.Text {
 }
 
 func newTextThree(ctx context.Context, label string) *text.Text {
-	t := text.New()
+	t, _ := text.New()
 	go periodic(ctx, *redrawInterval*2, func() error {
-		value := plot3buf.Last(1, 1)
+		value := plot3buf.Last(1)
 		data := prepareStats(plot3buf)
-		pointer := plot3buf.LastLabels(1, 1)
+		pointer := plot3buf.LastLabels(1)
 		t.Reset()
 		if err := t.Write(fmt.Sprintf("%s", label), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParThreeTitle)))); err != nil {
 			return err
@@ -565,12 +523,12 @@ func newTextThree(ctx context.Context, label string) *text.Text {
 }
 
 func newTextFour(ctx context.Context, label string) *text.Text {
-	t := text.New()
+	t, _ := text.New()
 	go periodic(ctx, *redrawInterval*2, func() error {
 
-		value := plot4buf.Last(1, 1)
+		value := plot4buf.Last(1)
 		data := prepareStats(plot4buf)
-		pointer := plot4buf.LastLabels(1, 1)
+		pointer := plot4buf.LastLabels(1)
 		t.Reset()
 		if err := t.Write(fmt.Sprintf("%s", label), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParFourTitle)))); err != nil {
 			return err
@@ -619,38 +577,70 @@ func readDataChannel(ctx context.Context) {
 
 // returns a line chart that displays data from column 2
 func newPlotStreamingData(ctx context.Context) *linechart.LineChart {
-	termWidth, termHeight := ui.TerminalDimensions()
+	//termWidth, termHeight := ui.TerminalDimensions()
 	//set termWidth to actual width of linechart 85% of screen
-	termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
+	//termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
 
-	lc := linechart.New(
+	lc, err := linechart.New(
 		linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
 		linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphYLabels))),
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
+		linechart.XAxisUnscaled(),
 	)
+	inputs := plot1buf.Buffer()
+	if err != nil {
+		fmt.Println("LineChart Error:", err)
+	}
+	//step1 = (step1 + 1) % len(inputs)
+	if err := lc.Series("first", inputs,
+		linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLineOne))),
+	); err != nil {
+		fmt.Println("LineChart Error:", err)
+	}
+	step := 0
 	//step1 := 0
-	go periodic(ctx, time.Duration(10*time.Millisecond), func() error {
+	go periodic(ctx, time.Duration(*redrawInterval/1), func() error {
 		var inputs []float64
 		var inputLabels []string
+		termWidth := lc.ValueCapacity() * *hScale
 
-		inputs = plot1buf.Last(termHeight, termWidth)
-		inputLabels = plot1buf.LastLabels(termHeight, termWidth)
+		inputs = plot1buf.Last(termWidth)
+		inputLabels = plot1buf.LastLabels(termWidth)
+		averages := plot1buf.LastAvg(termWidth)
+
 		var labelMap = map[int]string{}
 		for i, x := range inputLabels {
 			labelMap[i] = x
 		}
 		if *debug {
-			fmt.Println("DEBUG:\tData Plot 1 Data (Streaming Data):", plot1buf.Last(termHeight, termWidth))
-			fmt.Println("DEBUG:\tData Plot 1 Data Labels (Streaming Data):", plot1buf.LastLabels(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 1 (Streaming Data):", plot1buf.Last(termWidth))
+			fmt.Println("DEBUG:\tData Plot 1 (Streaming Data Labels):", plot1buf.LastLabels(termWidth))
 		}
-		//step1 = (step1 + 1) % len(inputs)
+
 		if err := lc.Series("first", inputs,
 			linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLineOne))),
 			linechart.SeriesXLabels(labelMap),
 		); err != nil {
 			return err
 		}
-
+		if *avgLine == true {
+			if step%10 == 1 {
+				if err := lc.Series("average", averages,
+					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(LineHigh))),
+					linechart.SeriesXLabels(labelMap),
+				); err != nil {
+					return err
+				}
+			} else {
+				if err := lc.Series("average", averages,
+					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(LineLow))),
+					linechart.SeriesXLabels(labelMap),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		step++
 		return nil
 	})
 	return lc
@@ -658,38 +648,64 @@ func newPlotStreamingData(ctx context.Context) *linechart.LineChart {
 
 // returns a line chart that displays data from column 2
 func newPlotOne(ctx context.Context) *linechart.LineChart {
-	termWidth, termHeight := ui.TerminalDimensions()
-	//set termWidth to actual width of linechart 85% of screen
-	termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
-
-	lc := linechart.New(
+	lc, err := linechart.New(
 		linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
 		linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphYLabels))),
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
+		linechart.XAxisUnscaled(),
 	)
-	//step1 := 0
-	go periodic(ctx, time.Duration(10*time.Millisecond), func() error {
+	inputs := plot1buf.Buffer()
+	if err != nil {
+		fmt.Println("LineChart Error:", err)
+	}
+	//step1 = (step1 + 1) % len(inputs)
+	if err := lc.Series("first", inputs,
+		linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLineOne))),
+	); err != nil {
+		fmt.Println("LineChart Error:", err)
+	}
+	step := 0
+	go periodic(ctx, time.Duration(*redrawInterval/1), func() error {
 		var inputs []float64
 		var inputLabels []string
+		termWidth := lc.ValueCapacity() * *hScale
+		inputs = plot1buf.Last(termWidth)
+		inputLabels = plot1buf.LastLabels(termWidth)
+		averages := plot1buf.LastAvg(termWidth)
 
-		inputs = plot1buf.Last(termHeight, termWidth)
-		inputLabels = plot1buf.LastLabels(termHeight, termWidth)
 		var labelMap = map[int]string{}
 		for i, x := range inputLabels {
 			labelMap[i] = x
 		}
 		if *debug {
-			fmt.Println("DEBUG:\tData Plot 1 Data:", plot1buf.Last(termHeight, termWidth))
-			fmt.Println("DEBUG:\tData Plot 1 Data Labels:", plot1buf.LastLabels(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 1 Data:", plot1buf.Last(termWidth))
+			fmt.Println("DEBUG:\tData Plot 1 Data Labels:", plot1buf.LastLabels(termWidth))
 		}
-		//step1 = (step1 + 1) % len(inputs)
+
 		if err := lc.Series("first", inputs,
 			linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLineOne))),
 			linechart.SeriesXLabels(labelMap),
 		); err != nil {
 			return err
 		}
-
+		if *avgLine == true {
+			if step%10 == 1 {
+				if err := lc.Series("average", averages,
+					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(LineHigh))),
+					linechart.SeriesXLabels(labelMap),
+				); err != nil {
+					return err
+				}
+			} else {
+				if err := lc.Series("average", averages,
+					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(LineLow))),
+					linechart.SeriesXLabels(labelMap),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		step++
 		return nil
 	})
 	return lc
@@ -697,46 +713,65 @@ func newPlotOne(ctx context.Context) *linechart.LineChart {
 
 // newSines returns a line chart that displays multiple sine series.
 func newPlotTwo(ctx context.Context) *linechart.LineChart {
-	termWidth, termHeight := ui.TerminalDimensions()
-	//set termWidth to actual width of linechart 85% of screen
-	termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
-	lc := linechart.New(
+	lc, err := linechart.New(
 		linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
 		linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphYLabels))),
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
+		linechart.XAxisUnscaled(),
 	)
-	//step1 := 0
+	if err != nil {
+		fmt.Println("LineChart Init Error:", err)
+	}
+	inputs := plot2buf.Buffer()
+	if err := lc.Series("first", inputs,
+		linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLineOne))),
+	); err != nil {
+		fmt.Println("LineChart Series Error:", err)
+	}
+	step := 0
 	go periodic(ctx, *redrawInterval/1, func() error {
 		var inputs []float64
 		var inputLabels []string
-		inputs = plot2buf.Last(termHeight, termWidth)
-		inputLabels = plot2buf.LastLabels(termHeight, termWidth)
-		//add every other label
-		//y := inputLabels[:0]
-		//for i, n := range inputLabels {
-		//	if i%5 != 0 {
-		//		y = append(y, n)
-		//	}
-		//}
+		termWidth := lc.ValueCapacity() * *hScale
+		inputs = plot2buf.Last(termWidth)
+		inputLabels = plot2buf.LastLabels(termWidth)
+		averages := plot2buf.LastAvg(termWidth)
 
 		labelMap := make(map[int]string)
 		for i, s := range inputLabels {
 			labelMap[i] = s
 		}
-
 		if *debug {
 			fmt.Println("DEBUG:\tData Plot 2 Label Map:", labelMap)
-			fmt.Println("DEBUG:\tData Plot 2 Data:", plot2buf.Last(termHeight, termWidth))
-			fmt.Println("DEBUG:\tData Plot 2 Data Labels:", plot2buf.LastLabels(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 2 Data:", plot2buf.Last(termWidth))
+			fmt.Println("DEBUG:\tData Plot 2 Averages:", plot2buf.LastAvg(termWidth))
+			fmt.Println("DEBUG:\tData Plot 2 Data Labels:", plot2buf.LastLabels(termWidth))
 		}
-		//step1 = (step1 + 1) % len(inputs)
 		if err := lc.Series("first", inputs,
 			linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLineTwo))),
 			linechart.SeriesXLabels(labelMap),
 		); err != nil {
 			return err
 		}
+		if *avgLine == true {
+			if step%10 == 1 {
+				if err := lc.Series("average", averages,
+					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(LineHigh))),
+					linechart.SeriesXLabels(labelMap),
+				); err != nil {
+					return err
+				}
+			} else {
+				if err := lc.Series("average", averages,
+					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(LineLow))),
+					linechart.SeriesXLabels(labelMap),
+				); err != nil {
+					return err
+				}
+			}
+		}
 
+		step++
 		return nil
 	})
 	return lc
@@ -744,28 +779,38 @@ func newPlotTwo(ctx context.Context) *linechart.LineChart {
 
 // newSines returns a line chart that displays multiple sine series.
 func newPlotThree(ctx context.Context) *linechart.LineChart {
-	termWidth, termHeight := ui.TerminalDimensions()
-	//set termWidth to actual width of linechart 85% of screen
-	termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
-
-	lc := linechart.New(
+	lc, err := linechart.New(
 		linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
 		linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphYLabels))),
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
+		linechart.XAxisUnscaled(),
 	)
-	//step1 := 0
+	if err != nil {
+		fmt.Println("LineChart Error:", err)
+	}
+	inputs := plot3buf.Buffer()
+	//step1 = (step1 + 1) % len(inputs)
+	if err := lc.Series("first", inputs,
+		linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLineOne))),
+	); err != nil {
+		fmt.Println("LineChart Error:", err)
+	}
+	step := 0
 	go periodic(ctx, *redrawInterval/1, func() error {
 		var inputs []float64
 		var inputLabels []string
-		inputs = plot3buf.Last(termHeight, termWidth)
-		inputLabels = plot3buf.LastLabels(termHeight, termWidth)
+		termWidth := lc.ValueCapacity() * *hScale
+		inputs = plot3buf.Last(termWidth)
+		inputLabels = plot3buf.LastLabels(termWidth)
+		averages := plot3buf.LastAvg(termWidth)
+
 		var labelMap = map[int]string{}
 		for i, x := range inputLabels {
 			labelMap[i] = x
 		}
 		if *debug {
-			fmt.Println("DEBUG:\tData Plot 3 Data:", plot3buf.Last(termHeight, termWidth))
-			fmt.Println("DEBUG:\tData Plot 3 Data Labels:", plot3buf.LastLabels(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 3 Data:", plot3buf.Last(termWidth))
+			fmt.Println("DEBUG:\tData Plot 3 Data Labels:", plot3buf.LastLabels(termWidth))
 		}
 		//step1 = (step1 + 1) % len(inputs)
 		if err := lc.Series("first", inputs,
@@ -774,7 +819,24 @@ func newPlotThree(ctx context.Context) *linechart.LineChart {
 		); err != nil {
 			return err
 		}
-
+		if *avgLine == true {
+			if step%10 == 1 {
+				if err := lc.Series("average", averages,
+					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(LineHigh))),
+					linechart.SeriesXLabels(labelMap),
+				); err != nil {
+					return err
+				}
+			} else {
+				if err := lc.Series("average", averages,
+					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(LineLow))),
+					linechart.SeriesXLabels(labelMap),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		step++
 		return nil
 	})
 	return lc
@@ -782,28 +844,40 @@ func newPlotThree(ctx context.Context) *linechart.LineChart {
 
 // newSines returns a line chart that displays multiple sine series.
 func newPlotFour(ctx context.Context) *linechart.LineChart {
-	termWidth, termHeight := ui.TerminalDimensions()
+	//termWidth, termHeight := ui.TerminalDimensions()
 	//set termWidth to actual width of linechart 85% of screen
-	termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
-
-	lc := linechart.New(
+	//termWidth = int((float64(termWidth) * float64(0.85))) * *hScale
+	lc, err := linechart.New(
 		linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
 		linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphYLabels))),
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
+		linechart.XAxisUnscaled(),
 	)
-	//step1 := 0
+	inputs := plot4buf.Buffer()
+	if err != nil {
+		fmt.Println("LineChart Error:", err)
+	}
+	//step1 = (step1 + 1) % len(inputs)
+	if err := lc.Series("first", inputs,
+		linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLineOne))),
+	); err != nil {
+		fmt.Println("LineChart Error:", err)
+	}
+	step := 0
 	go periodic(ctx, *redrawInterval/1, func() error {
 		var inputs []float64
 		var inputLabels []string
-		inputs = plot4buf.Last(termHeight, termWidth)
-		inputLabels = plot4buf.LastLabels(termHeight, termWidth)
+		termWidth := lc.ValueCapacity() * *hScale
+		inputs = plot4buf.Last(termWidth)
+		inputLabels = plot4buf.LastLabels(termWidth)
+		averages := plot4buf.LastAvg(termWidth)
 		var labelMap = map[int]string{}
 		for i, x := range inputLabels {
 			labelMap[i] = x
 		}
 		if *debug {
-			fmt.Println("DEBUG:\tData Plot 4 Data:", plot4buf.Last(termHeight, termWidth))
-			fmt.Println("DEBUG:\tData Plot 4 Data Labels:", plot4buf.LastLabels(termHeight, termWidth))
+			fmt.Println("DEBUG:\tData Plot 4 Data:", plot4buf.Last(termWidth))
+			fmt.Println("DEBUG:\tData Plot 4 Data Labels:", plot4buf.LastLabels(termWidth))
 		}
 		//step1 = (step1 + 1) % len(inputs)
 		if err := lc.Series("first", inputs,
@@ -812,7 +886,25 @@ func newPlotFour(ctx context.Context) *linechart.LineChart {
 		); err != nil {
 			return err
 		}
+		if *avgLine == true {
+			if step%10 == 1 {
+				if err := lc.Series("average", averages,
+					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(LineHigh))),
+					linechart.SeriesXLabels(labelMap),
+				); err != nil {
+					return err
+				}
+			} else {
+				if err := lc.Series("average", averages,
+					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(LineLow))),
+					linechart.SeriesXLabels(labelMap),
+				); err != nil {
+					return err
+				}
+			}
+		}
 
+		step++
 		return nil
 	})
 	return lc
