@@ -2,6 +2,10 @@
 
 <script id="asciicast-BjSD4WDbIYH2DDH3p2kcIy77L" src="https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L.js" async></script>
 
+[![asciicast](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L.svg)](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L)
+
+<a href="https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L" target="_blank"><img src="https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L.svg" /></a>
+
 Demo 5 Graphs (6 columns of data):
 seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)", "rand(x)", "rand(x)", "rand(x)"}{x=$1/10; print x,sin(x),cos(x),rand(x),rand(x),rand(x); system("sleep 0.02")}'  | ./datadash
 
