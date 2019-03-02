@@ -3,7 +3,7 @@ Visualize streaming or tabular data inside the terminal
 
 ## Description
 
-###### A graphing application written in go using termdash UI libraries, inspired by termeter. Delimited Data can be passed in by pipe or directly from a file.
+###### A graphing application written in go using <a href="https://github.com/mum4k/termdash">termdash</a>, inspired by <a href="https://github.com/atsaki/termeter">termeter</a>. Delimited Data can be passed in by pipe or directly from a file.
 
 ### Streaming Data:
 [![asciicast](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxi.svg)](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxi)
@@ -89,3 +89,5 @@ Below are examples of the accepted data structure. More examples can be found un
 23:50\t10\t10
 ```
 
+### License
+MIT
