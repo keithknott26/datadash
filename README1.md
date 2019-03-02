@@ -1,25 +1,39 @@
 # dataDash
+Visualize data inside the terminal
 
-###### A graphing application written in go using termdash UI libraries, inspired by termeter
+## Description
+
+###### A graphing application written in go using termdash UI libraries, inspired by termeter. Delimited Data can be passed in by pipe or directly from a file.
 
 [![asciicast](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L.svg)](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L)
 
 Demo 5 Graphs (6 columns of data):
-```
-seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)", "rand(x)", "rand(x)", "rand(x)"}{x=$1/10; print x,sin(x),cos(x),rand(x),rand(x),rand(x); system("sleep 0.02")}'  | ./datadash
+```bash
+$ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)", "rand(x)", "rand(x)", "rand(x)"}{x=$1/10; print x,sin(x),cos(x),rand(x),rand(x),rand(x); system("sleep 0.02")}'  | ./datadash
 ```
 
 Demo 1 Graph (2 columns of data):
- ```
-seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)"}{x=$1/10; print x,sin(x); system("sleep 0.02")}'  | ./datadash --label-mode time
+ ```bash
+$ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)"}{x=$1/10; print x,sin(x); system("sleep 0.02")}'  | ./datadash --label-mode time
 ```
 
  Demo 1 Graph (1 column of streaming data):
-```
-  seq 4000 | awk 'BEGIN{OFS="\t"; print "x"}{x=$1/10; print x system("sleep 0.02")}'  | ./datadash --label-mode time
+```bash
+ $ seq 4000 | awk 'BEGIN{OFS="\t"; print "x"}{x=$1/10; print x system("sleep 0.02")}'  | ./datadash --label-mode time
 ```
 
-To download:
+### Installation
+```bash
+$ go get -u github.com/keithknott26/datadash
 ```
-go get -u github.com/keithknott26/datadash
-```
+datadash can accept tabular data like CSV, TSV, or you can use a custom delimiter with the -d option. The default delimiter is tab
+
+## Chart types
+
+termeter supports following chart types. 
+
+* LINE
+  * Plot values as line plot
+  * Line graph supports zooming
+  * Supports scrolling for streaming data applications
+  * Scrolling can be disabled with the --no-scroll option
