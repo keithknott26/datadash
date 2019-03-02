@@ -1,12 +1,12 @@
 # dataDash
-Visualize data inside the terminal
+Visualize streaming or tabular data inside the terminal
 
 ## Description
 
 ###### A graphing application written in go using termdash UI libraries, inspired by termeter. Delimited Data can be passed in by pipe or directly from a file.
 
 ###Streaming Data:
-[![asciicast](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxisvg)](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxi)
+[![asciicast](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxi.svg)](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxi)
 
 ##### Demo (Streaming data):
 ```bash
