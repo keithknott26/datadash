@@ -225,7 +225,6 @@ func (r *Row) newStreamingLineChart(ctx context.Context) (*linechart.LineChart, 
 	var GraphLine int
 	var lc *linechart.LineChart
 	var err error
-	GraphLine = 10
 	if r.Id == 0 {
 		GraphLine = GraphLineOne
 	} else if r.Id == 1 {
@@ -238,6 +237,8 @@ func (r *Row) newStreamingLineChart(ctx context.Context) (*linechart.LineChart, 
 		GraphLine = GraphLineFour
 	} else if r.Id == 5 {
 		GraphLine = GraphLineFive
+	} else {
+		GraphLine = 10
 	}
 	if r.Scroll == true {
 		lc, err = linechart.New(

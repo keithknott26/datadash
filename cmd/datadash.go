@@ -67,42 +67,44 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 	var labels3 string
 	var labels4 string
 	var labels5 string
-	if graphs == 0 && *labelMode == "time" {
+	switch graphs {
+	case 0:
 		labels0 = "Streaming Data..."
 		labels1 = "Empty"
 		labels2 = "Empty"
 		labels3 = "Empty"
 		labels4 = "Empty"
 		labels5 = "Empty"
-	} else if graphs == 1 {
+		*labelMode = "time"
+	case 1:
 		labels0 = labels[0]
 		labels1 = labels[1]
 		labels2 = "Empty"
 		labels3 = "Empty"
 		labels4 = "Empty"
 		labels5 = "Empty"
-	} else if graphs == 2 {
+	case 2:
 		labels0 = labels[0]
 		labels1 = labels[1]
 		labels2 = labels[2]
 		labels3 = "Empty"
 		labels4 = "Empty"
 		labels5 = "Empty"
-	} else if graphs == 3 {
+	case 3:
 		labels0 = labels[0]
 		labels1 = labels[1]
 		labels2 = labels[2]
 		labels3 = labels[3]
 		labels4 = "Empty"
 		labels5 = "Empty"
-	} else if graphs == 4 {
+	case 4:
 		labels0 = labels[0]
 		labels1 = labels[1]
 		labels2 = labels[2]
 		labels3 = labels[3]
 		labels4 = labels[4]
 		labels5 = "Empty"
-	} else if graphs == 5 {
+	case 5:
 		labels0 = labels[0]
 		labels1 = labels[1]
 		labels2 = labels[2]
@@ -242,6 +244,8 @@ func initBuffer(records []string) {
 func parsePlotData(records []string) {
 	var label string
 	var record []string
+
+	//streaming data mode or normal mode
 	if graphs == 0 {
 		record = records[0:]
 	} else {
@@ -368,7 +372,7 @@ func main() {
 	kingpin.Version("0.0.1")
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	if *debug {
-		fmt.Printf("DEBUG:\tRunning with: Delimiter: '%s'\nlabelMode: %s\nReDraw Interval: %s\nSeek Interval: %s\n", *delimiter, *labelMode, *redrawInterval, *seekInterval)
+		fmt.Printf("DEBUG:\tRunning with: Delimiter: '%s'\nlabelMode: %s\nReDraw Interval: %s\nSeek Interval: %s\n, Scrolling: %t\nDisplay Average Line: %t\n", *delimiter, *labelMode, *redrawInterval, *seekInterval, *scrollData, *avgLine)
 	}
 	//define the reader type (Stdin or File based)
 	var reader *csv.Reader
@@ -413,12 +417,10 @@ func main() {
 			}
 			if faster == true {
 				time.Sleep(*seekInterval * 1)
-				//*seekInterval = *seekInterval - time.Duration(10*time.Millisecond)
-				//	redrawInterval = time.Duration(50*time.Millisecond) * time.Duration(*drawInterval)
+
 			}
 			if slower == true {
 				time.Sleep(*seekInterval * 6)
-				//time.Sleep(500 * time.Millisecond)
 			}
 			if interrupt == true {
 				time.Sleep(10 * time.Second)
@@ -435,7 +437,7 @@ func main() {
 		}
 	}() //end read from stdin/file
 
-	//initialize the ring buffer
+	//initialize the ring buffer and widgets
 	initBuffer(records)
 	//Initialize termbox in 256 color mode
 	t, err := termbox.New(termbox.ColorMode(terminalapi.ColorMode256))

@@ -5,21 +5,25 @@ Visualize data inside the terminal
 
 ###### A graphing application written in go using termdash UI libraries, inspired by termeter. Delimited Data can be passed in by pipe or directly from a file.
 
-[![asciicast](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L.svg)](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L)
+###Streaming Data:
+[![asciicast](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxisvg)](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxi)
 
-###### Demo (6 columns of data):
+##### Demo (Streaming data):
 ```bash
-$ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)", "rand(x)", "rand(x)", "rand(x)"}{x=$1/10; print x,sin(x),cos(x),rand(x),rand(x),rand(x); system("sleep 0.02")}'  | ./datadash
+ $ seq 4000 | awk 'BEGIN{OFS="\t"; print "x"}{x=$1/10; print x system("sleep 0.02")}'  | ./datadash --label-mode time
 ```
 
-###### Demo (2 columns of data):
+###Tabular Data:
+[![asciicast](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L.svg)](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L)
+
+##### Demo: (2 columns of data):
  ```bash
 $ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)"}{x=$1/10; print x,sin(x); system("sleep 0.02")}'  | ./datadash --label-mode time
 ```
 
-###### Demo (Streaming data):
+##### Demo: (6 columns of data):
 ```bash
- $ seq 4000 | awk 'BEGIN{OFS="\t"; print "x"}{x=$1/10; print x system("sleep 0.02")}'  | ./datadash --label-mode time
+$ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)", "rand(x)", "rand(x)", "rand(x)"}{x=$1/10; print x,sin(x),cos(x),rand(x),rand(x),rand(x); system("sleep 0.02")}'  | ./datadash
 ```
 
 ### Installation
@@ -54,7 +58,34 @@ Args:
 datadash currently supports following chart types:
 
 * Line
-  * Plot data as line graph
-  * Line graph supports zooming
-  * Supports scrolling for streaming data applications
-  * Scrolling can be disabled with the --no-scroll option
+  * Plot tabular or streaming data as line graph
+  * Line graph supports zooming with the scroll wheel or trackpad
+  * Supports X-Axis Auto scaling
+  * Displays the average value with the -a option (customize how many values to consider using -z)
+  * Different color lines for each graph
+  * Supports scrolling for streaming data applications (disable with the --no-scroll option)
+  * Displays up to five graphs simultaneously
+  * Displays Min, Mean, Max, and Outliers
+  * Customize the screen redraw interval and input seek interval for high latency or low bandwidth environments
+  * Sample datasets included
+
+## Data Structure
+Below are examples of the accepted data structure. More examples can be found under /sampledata
+
+##### Streaming Data (1 graph):
+```bash
+50
+60
+70
+```
+
+##### 3 Columns (2 graphs):
+```bash
+<ignored>\tRowLabel1\tRowLabel2
+00:00\t50\t100
+00:01\t60\t90
+00:02\t70\t80
+00:08\t80\t70
+23:50\t10\t10
+```
+
