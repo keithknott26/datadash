@@ -5,7 +5,7 @@ Visualize streaming or tabular data inside the terminal
 
 ###### A graphing application written in go using termdash UI libraries, inspired by termeter. Delimited Data can be passed in by pipe or directly from a file.
 
-###Streaming Data:
+### Streaming Data:
 [![asciicast](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxi.svg)](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxi)
 
 ##### Demo (Streaming data):
@@ -13,7 +13,7 @@ Visualize streaming or tabular data inside the terminal
  $ seq 4000 | awk 'BEGIN{OFS="\t"; print "x"}{x=$1/10; print x system("sleep 0.02")}'  | ./datadash --label-mode time
 ```
 
-###Tabular Data:
+### Tabular Data:
 [![asciicast](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L.svg)](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L)
 
 ##### Demo: (2 columns of data):
@@ -37,7 +37,7 @@ datadash can accept tabular data like CSV, TSV, or you can use a custom delimite
 ```bash
 $ usage: datadash [<flags>] [<input file>]
 
-A Data Visualization Tool
+A Data Visualization tool for the terminal
 
 Flags:
       --help                  Show context-sensitive help (also try --help-long and --help-man).
@@ -79,7 +79,7 @@ Below are examples of the accepted data structure. More examples can be found un
 70
 ```
 
-##### 3 Columns (2 graphs):
+##### 3 Columns (2 graphs): \t is a tab charachter
 ```bash
 <ignored>\tRowLabel1\tRowLabel2
 00:00\t50\t100
