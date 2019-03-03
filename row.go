@@ -9,6 +9,7 @@ import (
 	"github.com/mum4k/termdash/cell"
 	"github.com/mum4k/termdash/container"
 	"github.com/mum4k/termdash/linestyle"
+	"github.com/mum4k/termdash/widgets/barchart"
 	"github.com/mum4k/termdash/widgets/linechart"
 	"github.com/mum4k/termdash/widgets/text"
 )
@@ -22,50 +23,50 @@ type Panel interface {
 
 // row types
 const (
-	SCROLLING = iota
-	LINE
-	BAR
+	scrolling = iota
+	line
+	bar
 )
 
 // sort mode of counter panel
 const (
-	SORT_NONE = iota
-	SORT_ALPHABETICAL
-	SORT_NUMERICAL
+	sort_none = iota
+	sort_alphabetical
+	sort_numeric
 )
 
 var (
-	ParOneBorder     = 26
-	ParOneTitle      = 82
-	ParTwoBorder     = 25
-	ParTwoTitle      = 13
-	ParThreeBorder   = 25
-	ParThreeTitle    = 45
-	ParFourBorder    = 25
-	ParFourTitle     = 9
-	ParFiveTitle     = 165
-	ParFiveBorder    = 25
-	ParText          = 3
-	ParPointer       = 248
-	ParValue         = 15
-	GraphOneBorder   = 25
-	GraphTwoBorder   = 25
-	GraphThreeBorder = 25
-	GraphFourBorder  = 25
-	GraphFiveBorder  = 25
-	GraphAxes        = 8
-	GraphXLabels     = 248
-	GraphYLabels     = 15
-	GraphTitles      = 2
-	LineLow          = 235
-	LineAvg          = 235
-	LineHigh         = 239
-	GraphLineOne     = 82
-	GraphLineTwo     = 13
-	GraphLineThree   = 45
-	GraphLineFour    = 9
-	GraphLineFive    = 165
-	GraphLinePaused  = 1
+	parOneBorder     = 26
+	parOneTitle      = 82
+	parTwoBorder     = 25
+	parTwoTitle      = 13
+	parThreeBorder   = 25
+	parThreeTitle    = 45
+	parFourBorder    = 25
+	parFourTitle     = 9
+	parFiveTitle     = 165
+	parFiveBorder    = 25
+	parText          = 3
+	parPointer       = 248
+	parValue         = 15
+	graphOneBorder   = 25
+	graphTwoBorder   = 25
+	graphThreeBorder = 25
+	graphFourBorder  = 25
+	graphFiveBorder  = 25
+	graphAxes        = 8
+	graphXLabels     = 248
+	graphYLabels     = 15
+	graphTitles      = 2
+	lineLow          = 235
+	lineAvg          = 235
+	lineHigh         = 239
+	graphLineOne     = 82
+	graphLineTwo     = 13
+	graphLineThree   = 45
+	graphLineFour    = 9
+	graphLineFive    = 165
+	graphLinePaused  = 1
 	ctx              context.Context
 )
 
@@ -76,7 +77,7 @@ var (
 //}
 
 type Row struct {
-	Id               int
+	ID               int
 	Label            string
 	Scroll           bool
 	Average          bool
@@ -84,7 +85,8 @@ type Row struct {
 	Context          context.Context
 	Data             *float64RingBuffer
 	Averages         *float64RingBuffer
-	Chart            *linechart.LineChart
+	LineChart        *linechart.LineChart
+	BarChart         *barchart.BarChart
 	Textbox          *text.Text
 	DataContainer    []float64
 	LabelContainer   []string
@@ -97,7 +99,7 @@ type Row struct {
 
 func NewRow(ctx context.Context, label string, bufsize int, id int, scroll bool, average bool) *Row {
 	row := &Row{
-		Id:       id,
+		ID:       id,
 		Scroll:   scroll,
 		Average:  average,
 		Label:    label,
@@ -112,12 +114,13 @@ func NewRow(ctx context.Context, label string, bufsize int, id int, scroll bool,
 func (r *Row) InitWidgets(ctx context.Context, label string) *Row {
 	r.Label = label
 	r.Textbox = r.newTextBox(ctx, label)
-	r.Chart = r.newLineChart(ctx)
+	r.LineChart = r.newLineChart(ctx)
+	r.BarChart = r.newBarChart(ctx)
 	return r
 }
 
 func (r *Row) newLineChart(ctx context.Context) *linechart.LineChart {
-	lc, err := r.newStreamingLineChart(ctx)
+	lc, err := r.createLineChart(ctx)
 	if err != nil {
 		fmt.Println("LineChart Error:", err)
 	}
@@ -131,6 +134,14 @@ func (r *Row) newTextBox(ctx context.Context, label string) *text.Text {
 	return t
 }
 
+func (r *Row) newBarChart(ctx context.Context) *barchart.BarChart {
+	bc, err := r.createBarGraph(ctx)
+	if err != nil {
+		fmt.Println("BarGraph Error:", err)
+	}
+	return bc
+}
+
 func (r *Row) NewContainer(ctx context.Context, label string) []container.Option {
 	containerOptions := r.ContainerOptions(ctx)
 	return containerOptions
@@ -138,25 +149,28 @@ func (r *Row) NewContainer(ctx context.Context, label string) []container.Option
 func (r *Row) ContainerOptions(ctx context.Context) []container.Option {
 	var ParBorder int
 	var GraphBorder int
-	if r.Id == 0 {
-		GraphBorder = GraphOneBorder
-		ParBorder = ParOneBorder
-	} else if r.Id == 1 {
-		GraphBorder = GraphOneBorder
-		ParBorder = ParOneBorder
-	} else if r.Id == 2 {
-		GraphBorder = GraphTwoBorder
-		ParBorder = ParTwoBorder
-	} else if r.Id == 3 {
-		GraphBorder = GraphThreeBorder
-		ParBorder = ParThreeBorder
-	} else if r.Id == 4 {
-		GraphBorder = GraphFourBorder
-		ParBorder = ParFourBorder
-	} else if r.Id == 5 {
-		GraphBorder = GraphFiveBorder
-		ParBorder = ParFiveBorder
+
+	switch r.ID {
+	case 0:
+		GraphBorder = graphOneBorder
+		ParBorder = parOneBorder
+	case 1:
+		GraphBorder = graphOneBorder
+		ParBorder = parOneBorder
+	case 2:
+		GraphBorder = graphTwoBorder
+		ParBorder = parTwoBorder
+	case 3:
+		GraphBorder = graphThreeBorder
+		ParBorder = parThreeBorder
+	case 4:
+		GraphBorder = graphFourBorder
+		ParBorder = parFourBorder
+	case 5:
+		GraphBorder = graphFiveBorder
+		ParBorder = parFiveBorder
 	}
+
 	row := []container.Option{
 		container.SplitVertical(
 			container.Left(
@@ -170,7 +184,8 @@ func (r *Row) ContainerOptions(ctx context.Context) []container.Option {
 				container.Border(linestyle.Round),
 				container.BorderTitle(r.Label+" - 'q' Quit 'p' Pause 10s <- Slow | Resume -> | Scroll to Zoom..."),
 				container.BorderColor(cell.ColorNumber(GraphBorder)),
-				container.PlaceWidget(r.Chart),
+				//container.PlaceWidget(r.BarChart),
+				container.PlaceWidget(r.LineChart),
 			),
 			container.SplitPercent(15),
 		)}
@@ -179,18 +194,19 @@ func (r *Row) ContainerOptions(ctx context.Context) []container.Option {
 
 func (r *Row) newText(ctx context.Context, label string) (*text.Text, error) {
 	var ParTitle int
-	if r.Id == 0 {
-		ParTitle = ParOneTitle
-	} else if r.Id == 1 {
-		ParTitle = ParOneTitle
-	} else if r.Id == 2 {
-		ParTitle = ParTwoTitle
-	} else if r.Id == 3 {
-		ParTitle = ParThreeTitle
-	} else if r.Id == 4 {
-		ParTitle = ParFourTitle
-	} else if r.Id == 5 {
-		ParTitle = ParFiveTitle
+	switch r.ID {
+	case 0:
+		ParTitle = parOneTitle
+	case 1:
+		ParTitle = parOneTitle
+	case 2:
+		ParTitle = parTwoTitle
+	case 3:
+		ParTitle = parThreeTitle
+	case 4:
+		ParTitle = parFourTitle
+	case 5:
+		ParTitle = parFiveTitle
 	}
 
 	t, err := text.New()
@@ -206,52 +222,114 @@ func (r *Row) newText(ctx context.Context, label string) (*text.Text, error) {
 		if err := t.Write(fmt.Sprintf("%s", label), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParTitle)))); err != nil {
 			return err
 		}
-		if err := t.Write(fmt.Sprintf("\nTime:        %s", pointer), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParPointer)))); err != nil {
+		if err := t.Write(fmt.Sprintf("\nTime:        %s", pointer), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(parPointer)))); err != nil {
 			return err
 		}
-		if err := t.Write(fmt.Sprintf("\nValue:       %.2f", value), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParValue)))); err != nil {
+		if err := t.Write(fmt.Sprintf("\nValue:       %.2f", value), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(parValue)))); err != nil {
 			return err
 		}
-		if err := t.Write(fmt.Sprintf("%s", data), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParText)))); err != nil {
+		if err := t.Write(fmt.Sprintf("%s", data), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(parText)))); err != nil {
 			return err
 		}
 		return nil
 	})
 	return t, err
 }
+func (r *Row) createBarGraph(ctx context.Context) (*barchart.BarChart, error) {
+	var ParTitle int
+	switch r.ID {
+	case 0:
+		ParTitle = parOneTitle
+	case 1:
+		ParTitle = parOneTitle
+	case 2:
+		ParTitle = parTwoTitle
+	case 3:
+		ParTitle = parThreeTitle
+	case 4:
+		ParTitle = parFourTitle
+	case 5:
+		ParTitle = parFiveTitle
+	}
+	barcolors := make([]cell.Color, 0, 0)
+	for i := 1; i <= 28; i++ {
+		barcolors = append(barcolors, cell.ColorNumber(ParTitle))
+	}
+	valuecolors := make([]cell.Color, 0, 0)
+	for i := 1; i <= 28; i++ {
+		valuecolors = append(valuecolors, cell.ColorBlack)
+	}
+	bc, err := barchart.New(
+		barchart.BarColors(barcolors),
+		barchart.ValueColors(valuecolors),
+		barchart.ShowValues(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	go periodic(ctx, time.Duration(100*time.Millisecond), func() error {
+		defer func() {
+			recover()
+		}()
+		var inputs []float64
+		inputs = r.Data.Last(28)
+		values := make([]int, 0)
+		//use averages instead //TODO
+		if r.Average == true {
+			//averages
+			inputs = r.Averages.Last(28)
+		}
+		for _, x := range inputs {
+			values = append(values, round(x))
+		}
+		max := values[0] // assume first value is the smallest
+		for _, value := range values {
+			if value > max {
+				max = value // found another smaller value, replace previous value in max
+			}
+		}
 
-func (r *Row) newStreamingLineChart(ctx context.Context) (*linechart.LineChart, error) {
-	//set the line color based on the r.Id
+		return bc.Values(values, max+1)
+	})
+	return bc, err
+
+}
+
+func (r *Row) createLineChart(ctx context.Context) (*linechart.LineChart, error) {
+	//set the line color based on the r.ID
 	var GraphLine int
 	var lc *linechart.LineChart
 	var err error
-	if r.Id == 0 {
-		GraphLine = GraphLineOne
-	} else if r.Id == 1 {
-		GraphLine = GraphLineOne
-	} else if r.Id == 2 {
-		GraphLine = GraphLineTwo
-	} else if r.Id == 3 {
-		GraphLine = GraphLineThree
-	} else if r.Id == 4 {
-		GraphLine = GraphLineFour
-	} else if r.Id == 5 {
-		GraphLine = GraphLineFive
-	} else {
+
+	switch r.ID {
+	case 0:
+		GraphLine = graphLineOne
+	case 1:
+		GraphLine = graphLineOne
+	case 2:
+		GraphLine = graphLineTwo
+	case 3:
+		GraphLine = graphLineThree
+	case 4:
+		GraphLine = graphLineFour
+	case 5:
+		GraphLine = graphLineFive
+	default:
 		GraphLine = 10
 	}
+
 	if r.Scroll == true {
 		lc, err = linechart.New(
-			linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
-			linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphYLabels))),
-			linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
+			linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
+			linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
+			linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
 			linechart.XAxisUnscaled(),
 		)
 	} else {
 		lc, err = linechart.New(
-			linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(GraphAxes))),
-			linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphYLabels))),
-			linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(GraphXLabels))),
+			linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
+			linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
+			linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
 		)
 	}
 	inputs := r.Data.buffer
@@ -298,7 +376,7 @@ func (r *Row) newStreamingLineChart(ctx context.Context) (*linechart.LineChart, 
 		if r.Average == true {
 			if step%10 == 1 {
 				if err := lc.Series("average", averages,
-					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(LineHigh))),
+					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(lineHigh))),
 					linechart.SeriesXLabels(labelMap),
 				); err != nil {
 					return err
@@ -332,7 +410,7 @@ func (r *Row) Update(x float64, dataLabel string, averageSeek int) {
 }
 
 func findAverages(values []float64) float64 {
-	var total float64 = 0
+	var total float64
 	for _, value := range values {
 		total += value
 	}
@@ -406,4 +484,19 @@ func periodic(ctx context.Context, interval time.Duration, fn func() error) {
 			return
 		}
 	}
+}
+
+//rounding functions used by the bar chart
+func round(val float64) int {
+	if val < 0 {
+		return int(val - 0.5)
+	}
+	return int(val + 0.5)
+}
+
+func roundUp(val float64) int {
+	if val > 0 {
+		return int(val + 1.0)
+	}
+	return int(val)
 }

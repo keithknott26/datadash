@@ -47,12 +47,9 @@ var (
 	row5   *datadash.Row
 	//to be removed
 	//keep
-	dataChan      = make(chan []string, 5)
-	labels        = make([]string, 0, 10)
-	graphs        = 1
-	linchartWidth = 1
-	drawOffset    = 1
-	seekOffset    = 1
+	dataChan = make(chan []string, 5)
+	labels   = make([]string, 0, 10)
+	graphs   = 1
 	//speed controls
 	slower    = false
 	faster    = false
@@ -159,19 +156,21 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 			container.SplitPercent(50),
 		),
 	}
-	if graphs == 0 && *labelMode == "time" {
+
+	switch graphs {
+	case 0:
 		c, err := container.New(t, StreamingDataRow...)
 		if err != nil {
 			return nil, err
 		}
 		return c, nil
-	} else if graphs == 1 {
+	case 1:
 		c, err := container.New(t, FirstRow...)
 		if err != nil {
 			return nil, err
 		}
 		return c, nil
-	} else if graphs == 2 {
+	case 2:
 		c, err := container.New(
 			t,
 			container.SplitHorizontal(
@@ -184,8 +183,7 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 			return nil, err
 		}
 		return c, nil
-
-	} else if graphs == 3 {
+	case 3:
 		c, err := container.New(
 			t,
 			container.SplitHorizontal(
@@ -198,7 +196,7 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 			return nil, err
 		}
 		return c, nil
-	} else if graphs == 4 {
+	case 4:
 		c, err := container.New(
 			t,
 			AllRows...,
@@ -207,7 +205,7 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 			return nil, err
 		}
 		return c, nil
-	} else if graphs == 5 {
+	case 5:
 		c, err := container.New(
 			t,
 			container.SplitHorizontal(
@@ -220,7 +218,7 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 			return nil, err
 		}
 		return c, nil
-	} else {
+	default:
 		err := "\n\nError: Columns Detected: " + strconv.Itoa(graphs)
 		text := err + "\n\nError: This app wants a minimum of 2 columns and a maximum of 5 columns. You must include a header record:\n\n\t\tHeader record:\tIgnored<delimiter>Title\n\t\tData Row:\tX-Label<delimiter>Y-value\n\n\n\nExample:  \n\t\ttime\tADL Inserts\n\t\t00:01\t493\n\t\t00:02\t353\n\t\t00:03\t380\n\nExample:\n\t\tcol1\tcol2\n\t\t1\t493\n\t\t2\t353\n\t\t3\t321\n"
 
