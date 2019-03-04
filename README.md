@@ -26,12 +26,13 @@ datadash currently supports following chart types:
 ### Streaming Data: (Linechart)
 [![asciicast](https://asciinema.org/a/QG1y5rKn3K304Rivr6qlwvKrM.svg)](https://asciinema.org/a/QG1y5rKn3K304Rivr6qlwvKrM)
 ### Streaming Data: (Barchart)
-[![asciicast](http://www.giphy.com/gifs/3ocAEPMbacO4E15MN0)](http://www.giphy.com/gifs/3ocAEPMbacO4E15MN0)
-Iframe:
+<img src="https://s2.gifyu.com/images/1col-scrolling.gif" alt="1col-scrolling.gif" border="0">
 
-<iframe src="https://giphy.com/embed/3ocAEPMbacO4E15MN0" width="480" height="228" frameBorder="0" class="giphy-embed" allowFullScreen></iframe><p><a href="https://giphy.com/gifs/datadash-keithknott26-3ocAEPMbacO4E15MN0">via GIPHY</a></p>
-Div:
-<div style="width:100%;height:0;padding-bottom:48%;position:relative;"><iframe src="https://giphy.com/embed/3ocAEPMbacO4E15MN0" width="100%" height="100%" style="position:absolute" frameBorder="0" class="giphy-embed" allowFullScreen></iframe></div><p><a href="https://giphy.com/gifs/datadash-keithknott26-3ocAEPMbacO4E15MN0">via GIPHY</a></p>
+<img src="https://s2.gifyu.com/images/4col-scrolling.gif" alt="1col-scrolling.gif" border="0">
+
+<a href="https://gifyu.com/image/3wzp"><img src="https://s2.gifyu.com/images/4col-barchart.gif" alt="4col-barchart.gif" border="0"></a>
+
+[![asciicast](https://s2.gifyu.com/images/4col_scrolling.gif)](http://wwww.github.com/keithknott26/datadash)
 
 ##### Demo (Streaming data):
 ```bash
