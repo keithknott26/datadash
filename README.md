@@ -26,11 +26,12 @@ datadash currently supports following chart types:
 ### Streaming Data: (Linechart)
 [![asciicast](https://asciinema.org/a/QG1y5rKn3K304Rivr6qlwvKrM.svg)](https://asciinema.org/a/QG1y5rKn3K304Rivr6qlwvKrM)
 ### Streaming Data: (Barchart)
-<img src="https://s2.gifyu.com/images/1col-scrolling.gif" alt="1col-scrolling.gif" border="0">
+<img src="https://github.com/keithknott26/images/1col-scrolling.gif" alt="1col-scrolling.gif" border="0">
 
-<img src="https://s2.gifyu.com/images/4col-scrolling.gif" alt="1col-scrolling.gif" border="0">
+<img src="https://github.com/keithknott26/images/4col-scrolling.gif" alt="1col-scrolling.gif" border="0">
 
-<a href="https://gifyu.com/image/3wzp"><img src="https://s2.gifyu.com/images/4col-barchart.gif" alt="4col-barchart.gif" border="0"></a>
+<img src="https://github.com/keithknott26/images/4col-barchart.gif" alt="1col-scrolling.gif" border="0">
+
 
 [![asciicast](https://s2.gifyu.com/images/4col_scrolling.gif)](http://wwww.github.com/keithknott26/datadash)
 
