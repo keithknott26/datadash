@@ -26,7 +26,12 @@ datadash currently supports following chart types:
 ### Streaming Data: (Linechart)
 [![asciicast](https://asciinema.org/a/QG1y5rKn3K304Rivr6qlwvKrM.svg)](https://asciinema.org/a/QG1y5rKn3K304Rivr6qlwvKrM)
 ### Streaming Data: (Barchart)
-[![asciicast](https://asciinema.org/a/evYdUH2n1QoSV0q21XHy9Q3IQ.svg)](https://asciinema.org/a/evYdUH2n1QoSV0q21XHy9Q3IQ)
+[![asciicast](http://www.giphy.com/gifs/3ocAEPMbacO4E15MN0)](http://www.giphy.com/gifs/3ocAEPMbacO4E15MN0)
+Iframe:
+
+<iframe src="https://giphy.com/embed/3ocAEPMbacO4E15MN0" width="480" height="228" frameBorder="0" class="giphy-embed" allowFullScreen></iframe><p><a href="https://giphy.com/gifs/datadash-keithknott26-3ocAEPMbacO4E15MN0">via GIPHY</a></p>
+Div:
+<div style="width:100%;height:0;padding-bottom:48%;position:relative;"><iframe src="https://giphy.com/embed/3ocAEPMbacO4E15MN0" width="100%" height="100%" style="position:absolute" frameBorder="0" class="giphy-embed" allowFullScreen></iframe></div><p><a href="https://giphy.com/gifs/datadash-keithknott26-3ocAEPMbacO4E15MN0">via GIPHY</a></p>
 
 ##### Demo (Streaming data):
 ```bash
@@ -68,9 +73,9 @@ Below are examples of the accepted data structure. More examples can be found un
 70
 ```
 
-##### 3 Columns (2 graphs): \t is a tab charachter
+##### 3 Columns (2 graphs): (\t is the tab charachter)
 ```bash
-<ignored>\tRowLabel1\tRowLabel2
+time\tRowLabel1\tRowLabel2
 00:00\t50\t100
 00:01\t60\t90
 00:02\t70\t80
