@@ -24,16 +24,10 @@ datadash currently supports following chart types:
   * Support for Bar Graphs (Beta)
 
 ### Streaming Data: (Linechart)
-[![asciicast](https://asciinema.org/a/QG1y5rKn3K304Rivr6qlwvKrM.svg)](https://asciinema.org/a/QG1y5rKn3K304Rivr6qlwvKrM)
+<img src="https://github.com/keithknott26/datadash/blob/master/images/1col-scrolling.gif?raw=true" alt="1col-scrolling.gif" border="0">
+
 ### Streaming Data: (Barchart)
-<img src="https://github.com/keithknott26/images/1col-scrolling.gif" alt="1col-scrolling.gif" border="0">
-
-<img src="https://github.com/keithknott26/images/4col-scrolling.gif" alt="1col-scrolling.gif" border="0">
-
-<img src="https://github.com/keithknott26/images/4col-barchart.gif" alt="1col-scrolling.gif" border="0">
-
-
-[![asciicast](https://s2.gifyu.com/images/4col_scrolling.gif)](http://wwww.github.com/keithknott26/datadash)
+<img src="https://github.com/keithknott26/datadash/blob/master/images/4col-barchart.gif?raw=true" alt="4col-scrolling.gif" border="0">
 
 ##### Demo (Streaming data):
 ```bash
@@ -41,7 +35,7 @@ datadash currently supports following chart types:
 ```
 
 ### Tabular Data:
-[![asciicast](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L.svg)](https://asciinema.org/a/BjSD4WDbIYH2DDH3p2kcIy77L)
+<img src="https://github.com/keithknott26/datadash/blob/master/images/4col-scrolling.gif?raw=true" alt="4col-scrolling.gif" border="0">
 
 ##### Demo: (2 columns of data):
  ```bash
