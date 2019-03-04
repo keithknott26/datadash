@@ -21,10 +21,12 @@ datadash currently supports following chart types:
   * No dependencies, only one file is required
   * Sample datasets included
 * Bar
-  * Support for Bar graphs is already underway.
+  * Support for Bar Graphs (Beta)
 
-### Streaming Data:
-[![asciicast](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxi.svg)](https://asciinema.org/a/kfOcE6b9QssgbMn6qS7sW7Vxi)
+### Streaming Data: (Linechart)
+[![asciicast](https://asciinema.org/a/QG1y5rKn3K304Rivr6qlwvKrM.svg)](https://asciinema.org/a/QG1y5rKn3K304Rivr6qlwvKrM)
+### Streaming Data: (Barchart)
+[![asciicast](https://asciinema.org/a/evYdUH2n1QoSV0q21XHy9Q3IQ.svg)](https://asciinema.org/a/evYdUH2n1QoSV0q21XHy9Q3IQ)
 
 ##### Demo (Streaming data):
 ```bash
@@ -57,7 +59,7 @@ $ cat data.txt | datadash
 $ datadash data.txt
 
 ## Data Structure
-Below are examples of the accepted data structure. More examples can be found under /sampledata
+Below are examples of the accepted data structure. More examples can be found under /tools/sampledata
 
 ##### Streaming Data (1 graph):
 ```bash

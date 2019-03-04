@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	BUFFER_SIZE = 5000
+	BUFFER_SIZE = 50000
 )
 
 var (
@@ -260,7 +260,8 @@ func parsePlotData(records []string) {
 		if *debug {
 			fmt.Println("DEBUG:\tFull Record:", record)
 		}
-		if i == 0 {
+		switch i {
+		case 0:
 			if *debug {
 				fmt.Println("DEBUG:\tRecord[0]:", record[i])
 				fmt.Println("DEBUG:\tCount Value[i]:", i)
@@ -271,8 +272,7 @@ func parsePlotData(records []string) {
 			stream.Update(val, label, *avgSeek)
 			row1.Update(val, label, *avgSeek)
 
-		}
-		if i == 1 {
+		case 1:
 			if *debug {
 				fmt.Println("DEBUG:\tRecord[1]:", record[i])
 				fmt.Println("DEBUG:\tCount Value[i]:", i)
@@ -281,8 +281,8 @@ func parsePlotData(records []string) {
 			}
 			val, _ := strconv.ParseFloat(strings.TrimSpace(record[i]), 64)
 			row2.Update(val, label, *avgSeek)
-		}
-		if i == 2 {
+
+		case 2:
 			if *debug {
 				fmt.Println("DEBUG:\tRecord[2]:", record[i])
 				fmt.Println("DEBUG:\tCount Value[i]:", i)
@@ -291,8 +291,8 @@ func parsePlotData(records []string) {
 			}
 			val, _ := strconv.ParseFloat(strings.TrimSpace(record[i]), 64)
 			row3.Update(val, label, *avgSeek)
-		}
-		if i == 3 {
+
+		case 3:
 			if *debug {
 				fmt.Println("DEBUG:\tRecord[3]:", record[i])
 				fmt.Println("DEBUG:\tCount Value[i]:", i)
@@ -301,8 +301,8 @@ func parsePlotData(records []string) {
 			}
 			val, _ := strconv.ParseFloat(strings.TrimSpace(record[i]), 64)
 			row4.Update(val, label, *avgSeek)
-		}
-		if i == 4 {
+
+		case 4:
 			if *debug {
 				fmt.Println("DEBUG:\tRecord[5]:", record[i])
 				fmt.Println("DEBUG:\tCount Value[i]:", i)
