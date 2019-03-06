@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	BUFFER_SIZE = 50000
+	BUFFER_SIZE = 100000
 )
 
 var (
@@ -111,27 +111,27 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 	}
 
 	//Initialize Row
-	stream.InitWidgets(ctx, labels0)
+	stream.InitWidgets(ctx, labels0, *redrawInterval)
 	stream.Context = ctx
 	StreamingDataRow := stream.ContainerOptions(stream.Context)
 
-	row1.InitWidgets(ctx, labels1)
+	row1.InitWidgets(ctx, labels1, *redrawInterval)
 	row1.Context = ctx
 	FirstRow := row1.ContainerOptions(row1.Context)
 
-	row2.InitWidgets(ctx, labels2)
+	row2.InitWidgets(ctx, labels2, *redrawInterval)
 	row2.Context = ctx
 	SecondRow := row2.ContainerOptions(row2.Context)
 
-	row3.InitWidgets(ctx, labels3)
+	row3.InitWidgets(ctx, labels3, *redrawInterval)
 	row3.Context = ctx
 	ThirdRow := row3.ContainerOptions(row3.Context)
 
-	row4.InitWidgets(ctx, labels4)
+	row4.InitWidgets(ctx, labels4, *redrawInterval)
 	row4.Context = ctx
 	FourthRow := row4.ContainerOptions(row4.Context)
 
-	row5.InitWidgets(ctx, labels5)
+	row5.InitWidgets(ctx, labels5, *redrawInterval)
 	row5.Context = ctx
 	FifthRow := row5.ContainerOptions(row5.Context)
 

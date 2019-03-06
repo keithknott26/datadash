@@ -29,6 +29,9 @@ datadash currently supports following chart types:
 ### Streaming Data: (Barchart)
 <img src="https://github.com/keithknott26/datadash/blob/master/images/4col-barchart.gif?raw=true" alt="4col-scrolling.gif" border="0">
 
+### Streaming Data: (SparkLines)
+<img src="https://github.com/keithknott26/datadash/blob/master/images/4col-sparkline.gif?raw=true" alt="4col-sparkline.gif" border="0">
+
 ##### Demo (Streaming data):
 ```bash
  $ seq 4000 | awk 'BEGIN{OFS="\t"; print "x"}{x=$1/10; print x system("sleep 0.02")}'  | ./datadash --label-mode time
