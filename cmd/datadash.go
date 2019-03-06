@@ -34,6 +34,7 @@ var (
 	scrollData     = app.Flag("scroll", "Whether or not to scroll chart data").Short('s').Default("true").Bool()
 	avgLine        = app.Flag("average-line", "Enables the line representing the average of values").Short('a').Default("false").Bool()
 	avgSeek        = app.Flag("average-seek", "The number of values to consider when displaying the average line: (50,100,500...)").Short('z').Default("500").Int()
+	graphType      = app.Flag("graph-type", "The type of graphs to display (Line, Bar, Spark). Default: Line").Short('g').Default("Line").String()
 	redrawInterval = app.Flag("redraw-interval", "The interval at which objects on the screen are redrawn: (100ms,250ms,1s,5s..)").Short('r').Default("10ms").Duration()
 	seekInterval   = app.Flag("seek-interval", "The interval at which records (lines) are read from the datasource: (100ms,250ms,1s,5s..)").Short('l').Default("20ms").Duration()
 	inputFile      = app.Arg("input file", "A file containing a label header, and data in columns separated by delimiter 'd'.\nData piped from Stdin uses the same format").File()
@@ -113,27 +114,27 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 	//Initialize Row
 	stream.InitWidgets(ctx, labels0, *redrawInterval)
 	stream.Context = ctx
-	StreamingDataRow := stream.ContainerOptions(stream.Context)
+	StreamingDataRow := stream.ContainerOptions(stream.Context, *graphType)
 
 	row1.InitWidgets(ctx, labels1, *redrawInterval)
 	row1.Context = ctx
-	FirstRow := row1.ContainerOptions(row1.Context)
+	FirstRow := row1.ContainerOptions(row1.Context, *graphType)
 
 	row2.InitWidgets(ctx, labels2, *redrawInterval)
 	row2.Context = ctx
-	SecondRow := row2.ContainerOptions(row2.Context)
+	SecondRow := row2.ContainerOptions(row2.Context, *graphType)
 
 	row3.InitWidgets(ctx, labels3, *redrawInterval)
 	row3.Context = ctx
-	ThirdRow := row3.ContainerOptions(row3.Context)
+	ThirdRow := row3.ContainerOptions(row3.Context, *graphType)
 
 	row4.InitWidgets(ctx, labels4, *redrawInterval)
 	row4.Context = ctx
-	FourthRow := row4.ContainerOptions(row4.Context)
+	FourthRow := row4.ContainerOptions(row4.Context, *graphType)
 
 	row5.InitWidgets(ctx, labels5, *redrawInterval)
 	row5.Context = ctx
-	FifthRow := row5.ContainerOptions(row5.Context)
+	FifthRow := row5.ContainerOptions(row5.Context, *graphType)
 
 	TopHalf := []container.Option{
 		container.SplitHorizontal(

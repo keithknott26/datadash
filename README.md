@@ -60,9 +60,10 @@ datadash can accept tabular data like CSV, TSV, or you can use a custom delimite
 
 ### Input Methods
 Input data from stdin or file.
-
+```bash
 $ cat data.txt | datadash
 $ datadash data.txt
+```
 
 ## Data Structure
 Below are examples of the accepted data structure. More examples can be found under /tools/sampledata

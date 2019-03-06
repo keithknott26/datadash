@@ -156,13 +156,13 @@ func (r *Row) newSparkLine(ctx context.Context) *sparkline.SparkLine {
 }
 
 func (r *Row) NewContainer(ctx context.Context, label string) []container.Option {
-	containerOptions := r.ContainerOptions(ctx)
+	containerOptions := r.ContainerOptions(ctx, "Line")
 	return containerOptions
 }
-func (r *Row) ContainerOptions(ctx context.Context) []container.Option {
+func (r *Row) ContainerOptions(ctx context.Context, graphType string) []container.Option {
 	var ParBorder int
 	var GraphBorder int
-
+	var row []container.Option
 	switch r.ID {
 	case 0:
 		GraphBorder = graphOneBorder
@@ -183,26 +183,82 @@ func (r *Row) ContainerOptions(ctx context.Context) []container.Option {
 		GraphBorder = graphFiveBorder
 		ParBorder = parFiveBorder
 	}
-
-	row := []container.Option{
-		container.SplitVertical(
-			container.Left(
-				container.Border(linestyle.Round),
-				container.BorderTitle("Statistics"),
-				container.BorderTitleAlignCenter(),
-				container.BorderColor(cell.ColorNumber(ParBorder)),
-				container.PlaceWidget(r.Textbox),
-			),
-			container.Right(
-				container.Border(linestyle.Round),
-				container.BorderTitle(r.Label+" - 'q' Quit | 'p' Pause 10s | <- Slow | Resume -> | Scroll to Zoom..."),
-				container.BorderColor(cell.ColorNumber(GraphBorder)),
-				//container.PlaceWidget(r.SparkLine),
-				//container.PlaceWidget(r.BarChart),
-				container.PlaceWidget(r.LineChart),
-			),
-			container.SplitPercent(15),
-		)}
+	switch graphType {
+	case "Line":
+		row = []container.Option{
+			container.SplitVertical(
+				container.Left(
+					container.Border(linestyle.Round),
+					container.BorderTitle("Statistics"),
+					container.BorderTitleAlignCenter(),
+					container.BorderColor(cell.ColorNumber(ParBorder)),
+					container.PlaceWidget(r.Textbox),
+				),
+				container.Right(
+					container.Border(linestyle.Round),
+					container.BorderTitle(r.Label+" - 'q' Quit | 'p' Pause 10s | <- Slow | Resume -> | Scroll to Zoom..."),
+					container.BorderColor(cell.ColorNumber(GraphBorder)),
+					//container.PlaceWidget(r.SparkLine),
+					//container.PlaceWidget(r.BarChart),
+					container.PlaceWidget(r.LineChart),
+				),
+				container.SplitPercent(15),
+			)}
+	case "Bar":
+		row = []container.Option{
+			container.SplitVertical(
+				container.Left(
+					container.Border(linestyle.Round),
+					container.BorderTitle("Statistics"),
+					container.BorderTitleAlignCenter(),
+					container.BorderColor(cell.ColorNumber(ParBorder)),
+					container.PlaceWidget(r.Textbox),
+				),
+				container.Right(
+					container.Border(linestyle.Round),
+					container.BorderTitle(r.Label+" - 'q' Quit | 'p' Pause 10s | <- Slow | Resume -> | Scroll to Zoom..."),
+					container.BorderColor(cell.ColorNumber(GraphBorder)),
+					container.PlaceWidget(r.BarChart),
+				),
+				container.SplitPercent(15),
+			)}
+	case "Spark":
+		row = []container.Option{
+			container.SplitVertical(
+				container.Left(
+					container.Border(linestyle.Round),
+					container.BorderTitle("Statistics"),
+					container.BorderTitleAlignCenter(),
+					container.BorderColor(cell.ColorNumber(ParBorder)),
+					container.PlaceWidget(r.Textbox),
+				),
+				container.Right(
+					container.Border(linestyle.Round),
+					container.BorderTitle(r.Label+" - 'q' Quit | 'p' Pause 10s | <- Slow | Resume -> | Scroll to Zoom..."),
+					container.BorderColor(cell.ColorNumber(GraphBorder)),
+					container.PlaceWidget(r.SparkLine),
+				),
+				container.SplitPercent(15),
+			)}
+	default:
+		row = []container.Option{
+			container.SplitVertical(
+				container.Left(
+					container.Border(linestyle.Round),
+					container.BorderTitle("Statistics"),
+					container.BorderTitleAlignCenter(),
+					container.BorderColor(cell.ColorNumber(ParBorder)),
+					container.PlaceWidget(r.Textbox),
+				),
+				container.Right(
+					container.Border(linestyle.Round),
+					container.BorderTitle(r.Label+" - 'q' Quit | 'p' Pause 10s | <- Slow | Resume -> | Scroll to Zoom..."),
+					container.BorderColor(cell.ColorNumber(GraphBorder)),
+					container.PlaceWidget(r.LineChart),
+				),
+				container.SplitPercent(15),
+			)}
+	}
 	return row
 }
 
