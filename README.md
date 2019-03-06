@@ -22,6 +22,8 @@ datadash currently supports following chart types:
   * Sample datasets included
 * Bar
   * Support for Bar Graphs (Beta)
+* SparkLine
+  * Support for SparkLine Graphs (Beta)
 
 ### Streaming Data: (Linechart)
 <img src="https://github.com/keithknott26/datadash/blob/master/images/1col-scrolling.gif?raw=true" alt="1col-scrolling.gif" border="0">

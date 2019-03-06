@@ -11,6 +11,7 @@ import (
 	"github.com/mum4k/termdash/linestyle"
 	"github.com/mum4k/termdash/widgets/barchart"
 	"github.com/mum4k/termdash/widgets/linechart"
+	"github.com/mum4k/termdash/widgets/sparkline"
 	"github.com/mum4k/termdash/widgets/text"
 )
 
@@ -87,10 +88,12 @@ type Row struct {
 	Averages         *float64RingBuffer
 	LineChart        *linechart.LineChart
 	BarChart         *barchart.BarChart
+	SparkLine        *sparkline.SparkLine
 	Textbox          *text.Text
 	DataContainer    []float64
 	LabelContainer   []string
 	AverageContainer []float64
+	RedrawInterval   time.Duration
 }
 
 //func (self *Row) increment() {
@@ -111,11 +114,13 @@ func NewRow(ctx context.Context, label string, bufsize int, id int, scroll bool,
 	return row
 }
 
-func (r *Row) InitWidgets(ctx context.Context, label string) *Row {
+func (r *Row) InitWidgets(ctx context.Context, label string, reDrawInterval time.Duration) *Row {
 	r.Label = label
+	r.RedrawInterval = reDrawInterval
 	r.Textbox = r.newTextBox(ctx, label)
 	r.LineChart = r.newLineChart(ctx)
 	r.BarChart = r.newBarChart(ctx)
+	r.SparkLine = r.newSparkLine(ctx)
 	return r
 }
 
@@ -138,6 +143,14 @@ func (r *Row) newBarChart(ctx context.Context) *barchart.BarChart {
 	bc, err := r.createBarGraph(ctx)
 	if err != nil {
 		fmt.Println("BarGraph Error:", err)
+	}
+	return bc
+}
+
+func (r *Row) newSparkLine(ctx context.Context) *sparkline.SparkLine {
+	bc, err := r.createSparkLine(ctx)
+	if err != nil {
+		fmt.Println("Sparkline Error:", err)
 	}
 	return bc
 }
@@ -182,8 +195,9 @@ func (r *Row) ContainerOptions(ctx context.Context) []container.Option {
 			),
 			container.Right(
 				container.Border(linestyle.Round),
-				container.BorderTitle(r.Label+" - 'q' Quit 'p' Pause 10s <- Slow | Resume -> | Scroll to Zoom..."),
+				container.BorderTitle(r.Label+" - 'q' Quit | 'p' Pause 10s | <- Slow | Resume -> | Scroll to Zoom..."),
 				container.BorderColor(cell.ColorNumber(GraphBorder)),
+				//container.PlaceWidget(r.SparkLine),
 				//container.PlaceWidget(r.BarChart),
 				container.PlaceWidget(r.LineChart),
 			),
@@ -211,7 +225,7 @@ func (r *Row) newText(ctx context.Context, label string) (*text.Text, error) {
 
 	t, err := text.New()
 	context := ctx
-	go periodic(context, time.Duration(100*time.Millisecond)/2, func() error {
+	go periodic(context, r.RedrawInterval/2, func() error {
 		defer func() {
 			recover()
 		}()
@@ -252,32 +266,35 @@ func (r *Row) createBarGraph(ctx context.Context) (*barchart.BarChart, error) {
 		ParTitle = parFiveTitle
 	}
 	barcolors := make([]cell.Color, 0, 0)
-	for i := 1; i <= 28; i++ {
+	valuecolors := make([]cell.Color, 0, 0)
+	for i := 1; i <= 100; i++ {
 		barcolors = append(barcolors, cell.ColorNumber(ParTitle))
 	}
-	valuecolors := make([]cell.Color, 0, 0)
-	for i := 1; i <= 28; i++ {
+	for i := 1; i <= 100; i++ {
 		valuecolors = append(valuecolors, cell.ColorBlack)
 	}
 	bc, err := barchart.New(
 		barchart.BarColors(barcolors),
 		barchart.ValueColors(valuecolors),
 		barchart.ShowValues(),
+		barchart.BarWidth(3),
 	)
+
 	if err != nil {
 		return nil, err
 	}
-	go periodic(ctx, time.Duration(100*time.Millisecond), func() error {
+	go periodic(ctx, r.RedrawInterval, func() error {
 		defer func() {
 			recover()
 		}()
 		var inputs []float64
-		inputs = r.Data.Last(28)
+
+		inputs = r.Data.Last(bc.ValueCapacity())
 		values := make([]int, 0)
 		//use averages instead //TODO
 		if r.Average == true {
 			//averages
-			inputs = r.Averages.Last(28)
+			inputs = r.Averages.Last(bc.ValueCapacity())
 		}
 		for _, x := range inputs {
 			values = append(values, round(x))
@@ -292,6 +309,57 @@ func (r *Row) createBarGraph(ctx context.Context) (*barchart.BarChart, error) {
 		return bc.Values(values, max+1)
 	})
 	return bc, err
+
+}
+
+func (r *Row) createSparkLine(ctx context.Context) (*sparkline.SparkLine, error) {
+	var ParTitle int
+	switch r.ID {
+	case 0:
+		ParTitle = parOneTitle
+	case 1:
+		ParTitle = parOneTitle
+	case 2:
+		ParTitle = parTwoTitle
+	case 3:
+		ParTitle = parThreeTitle
+	case 4:
+		ParTitle = parFourTitle
+	case 5:
+		ParTitle = parFiveTitle
+	}
+
+	sl, err := sparkline.New(
+		sparkline.Color(cell.Color(ParTitle)),
+	)
+	if err != nil {
+		panic(err)
+	}
+	go periodic(ctx, r.RedrawInterval*4, func() error {
+		defer func() {
+			recover()
+		}()
+		var inputs []float64
+
+		inputs = r.Data.Last(1)
+		values := make([]int, 0)
+		//use averages instead //TODO
+		if r.Average == true {
+			//averages
+			inputs = r.Averages.Last(sl.ValueCapacity())
+		}
+		for _, x := range inputs {
+			values = append(values, round(x))
+		}
+		max := values[0] // assume first value is the smallest
+		for _, value := range values {
+			if value > max {
+				max = value // found another smaller value, replace previous value in max
+			}
+		}
+		return sl.Add(values)
+	})
+	return sl, err
 
 }
 
@@ -356,8 +424,8 @@ func (r *Row) createLineChart(ctx context.Context) (*linechart.LineChart, error)
 		if r.Scroll == true {
 			graphWidth = lc.ValueCapacity()
 		} else {
-			//only scroll if we've reached 1million line
-			graphWidth = 5000
+			//only scroll if we've reached 5000 records
+			graphWidth = 100000
 		}
 		inputs = r.Data.Last(graphWidth)
 		inputLabels = r.Labels.Last(graphWidth)
