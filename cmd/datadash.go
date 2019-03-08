@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	BUFFER_SIZE = 100000
+	BUFFER_SIZE = 1440
 )
 
 var (
@@ -48,8 +48,8 @@ var (
 	row5   *datadash.Row
 	//to be removed
 	//keep
-	dataChan = make(chan []string, 5)
-	labels   = make([]string, 0, 10)
+	dataChan = make(chan []string, 10)
+	labels   = make([]string, 0, 0)
 	graphs   = 1
 	//speed controls
 	slower    = false
@@ -111,28 +111,52 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 		labels5 = labels[5]
 	}
 
+	//types := make([]rune, len(labels), len(labels))
+	//copy(types, []rune(strings.ToUpper(*panelTypes)))
+	//for i, label := range labels {
+	//	var panelType int
+	//	switch types[i] {
+	//	case 'L':
+	//		panelType = termeter.LINE
+	//	case 'D':
+	//		panelType = termeter.CDF
+	//	case 'C':
+	//		panelType = termeter.COUNTER
+	//	default:
+	///		graphType = "L"
+	//		//Initialize Row
+	//		stream.InitWidgets(ctx, labels0, *redrawInterval)
+	//		stream.Context = ctx
+	//		StreamingDataRow := stream.ContainerOptions(stream.Context, graphType)
+	//		if err != nil {
+	//			panelType = termeter.COUNTER
+	//		}
+	//	}
+	//	app.AddPanel(label, panelType, options)
+	//}
+
 	//Initialize Row
-	stream.InitWidgets(ctx, labels0, *redrawInterval)
+	stream.InitWidgets(ctx, labels0, *redrawInterval, *seekInterval)
 	stream.Context = ctx
 	StreamingDataRow := stream.ContainerOptions(stream.Context, *graphType)
 
-	row1.InitWidgets(ctx, labels1, *redrawInterval)
+	row1.InitWidgets(ctx, labels1, *redrawInterval, *seekInterval)
 	row1.Context = ctx
 	FirstRow := row1.ContainerOptions(row1.Context, *graphType)
 
-	row2.InitWidgets(ctx, labels2, *redrawInterval)
+	row2.InitWidgets(ctx, labels2, *redrawInterval, *seekInterval)
 	row2.Context = ctx
 	SecondRow := row2.ContainerOptions(row2.Context, *graphType)
 
-	row3.InitWidgets(ctx, labels3, *redrawInterval)
+	row3.InitWidgets(ctx, labels3, *redrawInterval, *seekInterval)
 	row3.Context = ctx
 	ThirdRow := row3.ContainerOptions(row3.Context, *graphType)
 
-	row4.InitWidgets(ctx, labels4, *redrawInterval)
+	row4.InitWidgets(ctx, labels4, *redrawInterval, *seekInterval)
 	row4.Context = ctx
 	FourthRow := row4.ContainerOptions(row4.Context, *graphType)
 
-	row5.InitWidgets(ctx, labels5, *redrawInterval)
+	row5.InitWidgets(ctx, labels5, *redrawInterval, *seekInterval)
 	row5.Context = ctx
 	FifthRow := row5.ContainerOptions(row5.Context, *graphType)
 

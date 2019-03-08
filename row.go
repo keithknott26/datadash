@@ -94,6 +94,7 @@ type Row struct {
 	LabelContainer   []string
 	AverageContainer []float64
 	RedrawInterval   time.Duration
+	SeekInterval     time.Duration
 }
 
 //func (self *Row) increment() {
@@ -114,9 +115,10 @@ func NewRow(ctx context.Context, label string, bufsize int, id int, scroll bool,
 	return row
 }
 
-func (r *Row) InitWidgets(ctx context.Context, label string, reDrawInterval time.Duration) *Row {
+func (r *Row) InitWidgets(ctx context.Context, label string, reDrawInterval time.Duration, seekInterval time.Duration) *Row {
 	r.Label = label
 	r.RedrawInterval = reDrawInterval
+	r.SeekInterval = seekInterval
 	r.Textbox = r.newTextBox(ctx, label)
 	r.LineChart = r.newLineChart(ctx)
 	r.BarChart = r.newBarChart(ctx)
@@ -155,10 +157,6 @@ func (r *Row) newSparkLine(ctx context.Context) *sparkline.SparkLine {
 	return bc
 }
 
-func (r *Row) NewContainer(ctx context.Context, label string) []container.Option {
-	containerOptions := r.ContainerOptions(ctx, "Line")
-	return containerOptions
-}
 func (r *Row) ContainerOptions(ctx context.Context, graphType string) []container.Option {
 	var ParBorder int
 	var GraphBorder int
@@ -468,7 +466,7 @@ func (r *Row) createLineChart(ctx context.Context) (*linechart.LineChart, error)
 	}
 
 	step := 0
-	go periodic(ctx, time.Duration(10*time.Millisecond), func() error {
+	go periodic(ctx, time.Duration(r.RedrawInterval), func() error {
 		defer func() {
 			recover()
 		}()
@@ -479,18 +477,19 @@ func (r *Row) createLineChart(ctx context.Context) (*linechart.LineChart, error)
 
 		if r.Scroll == true {
 			graphWidth = lc.ValueCapacity()
+			inputs = r.Data.Last(graphWidth)
+			inputLabels = r.Labels.Last(graphWidth)
+			averages = r.Averages.Last(graphWidth)
 		} else {
 			//only scroll if we've reached 5000 records
-			graphWidth = 100000
+			inputs = r.DataContainer
+			inputLabels = r.LabelContainer
+			averages = r.AverageContainer
 		}
-		inputs = r.Data.Last(graphWidth)
-		inputLabels = r.Labels.Last(graphWidth)
-		averages = r.Averages.Last(graphWidth)
 		var labelMap = map[int]string{}
 		for i, x := range inputLabels {
 			labelMap[i] = x
 		}
-
 		if err := lc.Series("first", inputs,
 			linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLine))),
 			linechart.SeriesXLabels(labelMap),
@@ -515,22 +514,16 @@ func (r *Row) createLineChart(ctx context.Context) (*linechart.LineChart, error)
 }
 
 func (r *Row) Update(x float64, dataLabel string, averageSeek int) {
+	//add values to ring buffer and data containers
 	r.Data.Add(x)
 	r.Labels.Add(dataLabel)
 	r.DataContainer = append(r.DataContainer, x)
-	r.AverageContainer = append(r.AverageContainer, findAverages(r.DataContainer))
 	r.LabelContainer = append(r.LabelContainer, dataLabel)
+	r.AverageContainer = append(r.AverageContainer, findAverages(r.DataContainer))
 
 	//find the average value of all values in Datacontainer
 	avg := findAverages(r.Data.Last(averageSeek))
 	r.Averages.Add(avg)
-	if dataLabel != "" {
-		r.Labels.Add(dataLabel)
-		r.updateContainer(x, dataLabel)
-	} else {
-		r.Labels.Add("-")
-		r.updateContainer(x, "-")
-	}
 }
 
 func findAverages(values []float64) float64 {
@@ -540,15 +533,6 @@ func findAverages(values []float64) float64 {
 	}
 	average := total / float64(len(values))
 	return average
-}
-
-func (r *Row) updateContainer(value float64, label string) {
-	defer func() {
-		recover()
-	}()
-	r.DataContainer = append(r.DataContainer, value)
-	r.AverageContainer = append(r.AverageContainer, findAverages(r.DataContainer))
-	r.LabelContainer = append(r.LabelContainer, label)
 }
 
 //calulate data stats
