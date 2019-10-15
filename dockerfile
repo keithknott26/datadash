@@ -1,4 +1,4 @@
-#!/usr/bin/env -S docker build --compress -t pvtmert/datadash -f
+#!/usr/bin/env -S docker build --compress -t keithknott26/datadash -f
 
 FROM debian as build
 
