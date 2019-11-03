@@ -1,4 +1,1 @@
-module github.com/keithknott26/datadash/src
-
-require (
-)
+module github.com/keithknott26/datadash
