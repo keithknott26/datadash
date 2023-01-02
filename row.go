@@ -115,14 +115,19 @@ func NewRow(ctx context.Context, label string, bufsize int, id int, scroll bool,
 	return row
 }
 
-func (r *Row) InitWidgets(ctx context.Context, label string, reDrawInterval time.Duration, seekInterval time.Duration) *Row {
+func (r *Row) InitWidgets(ctx context.Context, graphType string, label string, reDrawInterval time.Duration, seekInterval time.Duration) *Row {
 	r.Label = label
 	r.RedrawInterval = reDrawInterval
 	r.SeekInterval = seekInterval
 	r.Textbox = r.newTextBox(ctx, label)
 	r.LineChart = r.newLineChart(ctx)
-	r.BarChart = r.newBarChart(ctx)
-	r.SparkLine = r.newSparkLine(ctx)
+
+	if graphType == "bar" {
+		r.BarChart = r.newBarChart(ctx)
+	}
+	if graphType == "spark" {
+		r.SparkLine = r.newSparkLine(ctx)
+	}
 	return r
 }
 
@@ -182,7 +187,7 @@ func (r *Row) ContainerOptions(ctx context.Context, graphType string) []containe
 		ParBorder = parFiveBorder
 	}
 	switch graphType {
-	case "Line":
+	case "line":
 		row = []container.Option{
 			container.SplitVertical(
 				container.Left(
@@ -196,13 +201,11 @@ func (r *Row) ContainerOptions(ctx context.Context, graphType string) []containe
 					container.Border(linestyle.Round),
 					container.BorderTitle(r.Label+" - 'q' Quit | 'p' Pause 10s | <- Slow | Resume -> | Scroll to Zoom..."),
 					container.BorderColor(cell.ColorNumber(GraphBorder)),
-					//container.PlaceWidget(r.SparkLine),
-					//container.PlaceWidget(r.BarChart),
 					container.PlaceWidget(r.LineChart),
 				),
 				container.SplitPercent(15),
 			)}
-	case "Bar":
+	case "bar":
 		row = []container.Option{
 			container.SplitVertical(
 				container.Left(
@@ -220,7 +223,7 @@ func (r *Row) ContainerOptions(ctx context.Context, graphType string) []containe
 				),
 				container.SplitPercent(15),
 			)}
-	case "Spark":
+	case "spark":
 		row = []container.Option{
 			container.SplitVertical(
 				container.Left(
@@ -403,7 +406,10 @@ func (r *Row) createSparkLine(ctx context.Context) (*sparkline.SparkLine, error)
 			inputs = r.Averages.Last(sl.ValueCapacity())
 		}
 		for _, x := range inputs {
-			values = append(values, round(x))
+			// display only positive numbers since this is required by sparkline
+			if round(x) > 0 {
+				values = append(values, round(x))
+			}
 		}
 		max := values[0] // assume first value is the smallest
 		for _, value := range values {
@@ -535,7 +541,7 @@ func findAverages(values []float64) float64 {
 	return average
 }
 
-//calulate data stats
+// calulate data stats
 func prepareStats(row *Row, buffer *float64RingBuffer) string {
 	//use only accumulated data instead of ring buffer
 	data := row.DataContainer
@@ -594,7 +600,7 @@ func periodic(ctx context.Context, interval time.Duration, fn func() error) {
 	}
 }
 
-//rounding functions used by the bar chart
+// rounding functions used by the bar chart
 func round(val float64) int {
 	if val < 0 {
 		return int(val - 0.5)

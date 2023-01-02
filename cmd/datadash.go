@@ -29,29 +29,29 @@ const (
 var (
 	app            = kingpin.New("datadash", "A Data Visualization Tool")
 	debug          = app.Flag("debug", "Enable Debug Mode").Bool()
-	delimiter      = app.Flag("delimiter", "Record Delimiter:").Short('d').Default("\t").String()
+	delimiter      = app.Flag("delimiter", "Record Delimiter. Default: \t").Short('d').Default("\t").String()
 	labelMode      = app.Flag("label-mode", "X-Axis Labels: 'first' (use the first record in the column) or 'time' (use the current time)").Short('m').Default("first").String()
-	scrollData     = app.Flag("scroll", "Whether or not to scroll chart data").Short('s').Default("true").Bool()
-	avgLine        = app.Flag("average-line", "Enables the line representing the average of values").Short('a').Default("false").Bool()
-	avgSeek        = app.Flag("average-seek", "The number of values to consider when displaying the average line: (50,100,500...)").Short('z').Default("500").Int()
-	graphType      = app.Flag("graph-type", "The type of graphs to display (Line, Bar, Spark). Default: Line").Short('g').Default("Line").String()
-	redrawInterval = app.Flag("redraw-interval", "The interval at which objects on the screen are redrawn: (100ms,250ms,1s,5s..)").Short('r').Default("10ms").Duration()
-	seekInterval   = app.Flag("seek-interval", "The interval at which records (lines) are read from the datasource: (100ms,250ms,1s,5s..)").Short('l').Default("20ms").Duration()
+	scrollData     = app.Flag("scroll", "Whether or not to scroll chart data (true, false). Default: false").Short('s').Default("false").Bool()
+	avgLine        = app.Flag("average-line", "Enables the line representing the average of values. Default: false").Short('a').Default("false").Bool()
+	avgSeek        = app.Flag("average-seek", "The number of values to consider when displaying the average line: (50,100,500...) Default: 500").Short('z').Default("500").Int()
+	graphType      = app.Flag("graph-type", "The type of graphs to display (line, bar, spark). Default: line").Short('g').Default("line").String()
+	redrawInterval = app.Flag("redraw-interval", "The interval at which objects on the screen are redrawn: (100ms,250ms,1s,5s..) Default 10ms").Short('r').Default("10ms").Duration()
+	seekInterval   = app.Flag("seek-interval", "The interval at which records (lines) are read from the datasource: (100ms,250ms,1s,5s..) Default: 20ms").Short('l').Default("20ms").Duration()
 	inputFile      = app.Arg("input file", "A file containing a label header, and data in columns separated by delimiter 'd'.\nData piped from Stdin uses the same format").File()
 
 	ctx    context.Context
 	stream *datadash.Row
-	row1   *datadash.Row
-	row2   *datadash.Row
-	row3   *datadash.Row
-	row4   *datadash.Row
-	row5   *datadash.Row
-	//to be removed
-	//keep
+
+	row1 *datadash.Row
+	row2 *datadash.Row
+	row3 *datadash.Row
+	row4 *datadash.Row
+	row5 *datadash.Row
+
 	dataChan = make(chan []string, 10)
 	labels   = make([]string, 0, 0)
 	graphs   = 1
-	//speed controls
+	//scrolling speed control
 	slower    = false
 	faster    = false
 	interrupt = false
@@ -135,28 +135,28 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 	//	app.AddPanel(label, panelType, options)
 	//}
 
-	//Initialize Row
-	stream.InitWidgets(ctx, labels0, *redrawInterval, *seekInterval)
+	//Initialize Rows (up to 5 are supported)
+	stream.InitWidgets(ctx, *graphType, labels0, *redrawInterval, *seekInterval)
 	stream.Context = ctx
 	StreamingDataRow := stream.ContainerOptions(stream.Context, *graphType)
 
-	row1.InitWidgets(ctx, labels1, *redrawInterval, *seekInterval)
+	row1.InitWidgets(ctx, *graphType, labels1, *redrawInterval, *seekInterval)
 	row1.Context = ctx
 	FirstRow := row1.ContainerOptions(row1.Context, *graphType)
 
-	row2.InitWidgets(ctx, labels2, *redrawInterval, *seekInterval)
+	row2.InitWidgets(ctx, *graphType, labels2, *redrawInterval, *seekInterval)
 	row2.Context = ctx
 	SecondRow := row2.ContainerOptions(row2.Context, *graphType)
 
-	row3.InitWidgets(ctx, labels3, *redrawInterval, *seekInterval)
+	row3.InitWidgets(ctx, *graphType, labels3, *redrawInterval, *seekInterval)
 	row3.Context = ctx
 	ThirdRow := row3.ContainerOptions(row3.Context, *graphType)
 
-	row4.InitWidgets(ctx, labels4, *redrawInterval, *seekInterval)
+	row4.InitWidgets(ctx, *graphType, labels4, *redrawInterval, *seekInterval)
 	row4.Context = ctx
 	FourthRow := row4.ContainerOptions(row4.Context, *graphType)
 
-	row5.InitWidgets(ctx, labels5, *redrawInterval, *seekInterval)
+	row5.InitWidgets(ctx, *graphType, labels5, *redrawInterval, *seekInterval)
 	row5.Context = ctx
 	FifthRow := row5.ContainerOptions(row5.Context, *graphType)
 
@@ -377,8 +377,10 @@ func periodic(ctx context.Context, interval time.Duration, fn func() error) {
 
 // rotate returns a new slice with inputs rotated by step.
 // I.e. for a step of one:
-//   inputs[0] -> inputs[len(inputs)-1]
-//   inputs[1] -> inputs[0]
+//
+//	inputs[0] -> inputs[len(inputs)-1]
+//	inputs[1] -> inputs[0]
+//
 // And so on.
 func rotate(inputs []float64, step int) []float64 {
 	return append(inputs[step:], inputs[:step]...)

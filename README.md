@@ -34,8 +34,9 @@ datadash currently supports following chart types:
 <img src="https://github.com/keithknott26/datadash/blob/master/images/4col-sparkline.gif?raw=true" alt="4col-sparkline.gif" border="0">
 
 ##### Demo (Streaming data):
+This will continue scrolling to the right, displaying the most recent data first and removing the older data to the left.
 ```bash
-$ seq 4000 | awk 'BEGIN{OFS="\t"; print "x"}{x=$1/10; print x system("sleep 0.02")}'  | ./datadash --label-mode time
+seq 4000 | awk 'BEGIN{OFS="\t"; print "x"}{x=$1/10; print cos(x) system("sleep 0.01")}' | ./datadash --label-mode time --scroll
 ```
 ### Tabular Data:
 
@@ -43,15 +44,17 @@ $ seq 4000 | awk 'BEGIN{OFS="\t"; print "x"}{x=$1/10; print x system("sleep 0.02
 
 ##### Demo: (2 columns of data):
 ```bash
-$ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)"}{x=$1/10; print x,sin(x); system("sleep 0.02")}'  | ./datadash --label-mode time
+seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)"}{x=$1/10; print x,sin(x); system("sleep 0.02")}'  | ./datadash --label-mode time
 ```
-##### Demo: (6 columns of data):
+##### Line graph Demo: (6 columns of data) w/ grey average line:
 ```bash
-$ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)", "rand(x)", "rand(x)", "rand(x)"}{x=$1/10; print x,sin(x),cos(x),rand(x),rand(x),rand(x); system("sleep 0.02")}'  | ./datadash
+seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)", "rand(x)", "rand(x)", "rand(x)"}{x=$1/10; print x,sin(x),cos(x),rand(x),rand(x),rand(x); system("sleep 0.02")}'  | ./datadash -a
 ```
 ### Installation
 ```bash
-$ go get -u github.com/keithknott26/datadash
+go get -u github.com/keithknott26/datadash
+go build cmd/datadash ; cd cmd
+./datadash --help
 ```
 datadash can accept tabular data like CSV, TSV, or you can use a custom delimiter with the -d option. The default delimiter is tab.
 
@@ -98,7 +101,7 @@ Flags:
 
 Args:
 
-[<input file>]  A file containing a label header, and data in columns separated by delimiter 'd'. Data piped from Stdin uses the same format
+[<input file>]  A file containing a label header, and data in columns separated by a delimiter 'd'. Data piped from Stdin uses the same format
 
 ```
 ###### A graphing application written in go using <a href="https://github.com/mum4k/termdash">termdash</a>, inspired by <a href="https://github.com/atsaki/termeter">termeter</a>. 
