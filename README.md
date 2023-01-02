@@ -50,11 +50,11 @@ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)"}{x=$1/10; print x,sin(x); sys
 ```bash
 seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)", "rand(x)", "rand(x)", "rand(x)"}{x=$1/10; print x,sin(x),cos(x),rand(x),rand(x),rand(x); system("sleep 0.02")}'  | ./datadash -a
 ```
-### Installation
+### Installation (and demo)
 ```bash
 go get -u github.com/keithknott26/datadash
 go build cmd/datadash.go
-./datadash --help
+cat cmd/5col.tsv | ./datadash
 ```
 datadash can accept tabular data like CSV, TSV, or you can use a custom delimiter with the -d option. The default delimiter is tab.
 
