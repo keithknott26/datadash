@@ -53,7 +53,7 @@ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)", "rand(x)", "rand(x)
 ### Installation
 ```bash
 go get -u github.com/keithknott26/datadash
-go build cmd/datadash ; cd cmd
+go build cmd/datadash.go
 ./datadash --help
 ```
 datadash can accept tabular data like CSV, TSV, or you can use a custom delimiter with the -d option. The default delimiter is tab.
