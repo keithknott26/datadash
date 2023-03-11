@@ -592,7 +592,8 @@ func periodic(ctx context.Context, interval time.Duration, fn func() error) {
 		select {
 		case <-ticker.C:
 			if err := fn(); err != nil {
-				panic(err)
+				// panic(err)
+				return
 			}
 		case <-ctx.Done():
 			return
