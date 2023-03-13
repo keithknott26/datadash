@@ -87,6 +87,7 @@ type Row struct {
 	Data             *float64RingBuffer
 	Averages         *float64RingBuffer
 	LineChart        *linechart.LineChart
+	YAxisAdaptive    bool
 	BarChart         *barchart.BarChart
 	SparkLine        *sparkline.SparkLine
 	Textbox          *text.Text
@@ -101,16 +102,17 @@ type Row struct {
 //	self.id++
 //}
 
-func NewRow(ctx context.Context, label string, bufsize int, id int, scroll bool, average bool) *Row {
+func NewRow(ctx context.Context, label string, bufsize int, id int, scroll bool, average bool, yAxisAdaptive bool) *Row {
 	row := &Row{
-		ID:       id,
-		Scroll:   scroll,
-		Average:  average,
-		Label:    label,
-		Context:  ctx,
-		Data:     newFloat64RingBuffer(bufsize),
-		Labels:   newStringRingBuffer(bufsize),
-		Averages: newFloat64RingBuffer(bufsize),
+		ID:            id,
+		Scroll:        scroll,
+		YAxisAdaptive: yAxisAdaptive,
+		Average:       average,
+		Label:         label,
+		Context:       ctx,
+		Data:          newFloat64RingBuffer(bufsize),
+		Labels:        newStringRingBuffer(bufsize),
+		Averages:      newFloat64RingBuffer(bufsize),
 	}
 	return row
 }
@@ -447,18 +449,37 @@ func (r *Row) createLineChart(ctx context.Context) (*linechart.LineChart, error)
 	}
 
 	if r.Scroll == true {
-		lc, err = linechart.New(
-			linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
-			linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
-			linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
-			linechart.XAxisUnscaled(),
-		)
+		if r.YAxisAdaptive == true {
+			lc, err = linechart.New(
+				linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
+				linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
+				linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
+				linechart.XAxisUnscaled(),
+				linechart.YAxisAdaptive(),
+			)
+		} else {
+			lc, err = linechart.New(
+				linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
+				linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
+				linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
+				linechart.XAxisUnscaled(),
+			)
+		}
 	} else {
-		lc, err = linechart.New(
-			linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
-			linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
-			linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
-		)
+		if r.YAxisAdaptive == true {
+			lc, err = linechart.New(
+				linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
+				linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
+				linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
+				linechart.YAxisAdaptive(),
+			)
+		} else {
+			lc, err = linechart.New(
+				linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
+				linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
+				linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
+			)
+		}
 	}
 	inputs := r.Data.buffer
 	if err != nil {

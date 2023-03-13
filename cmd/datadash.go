@@ -34,6 +34,7 @@ var (
 	scrollData     = app.Flag("scroll", "Whether or not to scroll chart data (true, false). Default: false").Short('s').Default("false").Bool()
 	avgLine        = app.Flag("average-line", "Enables the line representing the average of values. Default: false").Short('a').Default("false").Bool()
 	avgSeek        = app.Flag("average-seek", "The number of values to consider when displaying the average line: (50,100,500...) Default: 500").Short('z').Default("500").Int()
+	yAxisAdaptive  = app.Flag("adaptive-y", "Makes the Y axis adapt its base value depending on the provided series. Without this option, the Y axis always starts at the zero value regardless of values available in the series. Default: false").Short('y').Default("false").Bool()
 	graphType      = app.Flag("graph-type", "The type of graphs to display (line, bar, spark). Default: line").Short('g').Default("line").String()
 	redrawInterval = app.Flag("redraw-interval", "The interval at which objects on the screen are redrawn: (100ms,250ms,1s,5s..) Default 10ms").Short('r').Default("10ms").Duration()
 	seekInterval   = app.Flag("seek-interval", "The interval at which records (lines) are read from the datasource: (100ms,250ms,1s,5s..) Default: 20ms").Short('l').Default("20ms").Duration()
@@ -256,12 +257,12 @@ func layout(ctx context.Context, t terminalapi.Terminal, labels []string) (*cont
 
 func initBuffer(records []string) {
 	//initialize the rows
-	stream = datadash.NewRow(ctx, "Streaming Data...", BUFFER_SIZE, 0, *scrollData, *avgLine)
-	row1 = datadash.NewRow(ctx, "Row1...", BUFFER_SIZE, 1, *scrollData, *avgLine)
-	row2 = datadash.NewRow(ctx, "Row2...", BUFFER_SIZE, 2, *scrollData, *avgLine)
-	row3 = datadash.NewRow(ctx, "Row3...", BUFFER_SIZE, 3, *scrollData, *avgLine)
-	row4 = datadash.NewRow(ctx, "Row4...", BUFFER_SIZE, 4, *scrollData, *avgLine)
-	row5 = datadash.NewRow(ctx, "Row5...", BUFFER_SIZE, 5, *scrollData, *avgLine)
+	stream = datadash.NewRow(ctx, "Streaming Data...", BUFFER_SIZE, 0, *scrollData, *avgLine, *yAxisAdaptive)
+	row1 = datadash.NewRow(ctx, "Row1...", BUFFER_SIZE, 1, *scrollData, *avgLine, *yAxisAdaptive)
+	row2 = datadash.NewRow(ctx, "Row2...", BUFFER_SIZE, 2, *scrollData, *avgLine, *yAxisAdaptive)
+	row3 = datadash.NewRow(ctx, "Row3...", BUFFER_SIZE, 3, *scrollData, *avgLine, *yAxisAdaptive)
+	row4 = datadash.NewRow(ctx, "Row4...", BUFFER_SIZE, 4, *scrollData, *avgLine, *yAxisAdaptive)
+	row5 = datadash.NewRow(ctx, "Row5...", BUFFER_SIZE, 5, *scrollData, *avgLine, *yAxisAdaptive)
 }
 
 func parsePlotData(records []string) {
@@ -397,7 +398,7 @@ func main() {
 	kingpin.Version("0.0.1")
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	if *debug {
-		fmt.Printf("DEBUG:\tRunning with: Delimiter: '%s'\nlabelMode: %s\nReDraw Interval: %s\nSeek Interval: %s\n, Scrolling: %t\nDisplay Average Line: %t\n", *delimiter, *labelMode, *redrawInterval, *seekInterval, *scrollData, *avgLine)
+		fmt.Printf("DEBUG:\tRunning with: Delimiter: '%s'\nlabelMode: %s\nReDraw Interval: %s\nSeek Interval: %s\n, Scrolling: %t\nDisplay Average Line: %t\n yAxisAdaptive: %t\n", *delimiter, *labelMode, *redrawInterval, *seekInterval, *scrollData, *avgLine, *yAxisAdaptive)
 	}
 	//define the reader type (Stdin or File based)
 	var reader *csv.Reader
