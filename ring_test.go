@@ -7,6 +7,70 @@ import (
 )
 
 // =========================================================================
+// Latest
+// =========================================================================
+
+func TestLatest_Empty(t *testing.T) {
+	r := NewRing(5)
+	_, ok := r.Latest()
+	if ok {
+		t.Error("Latest() on empty ring should return false")
+	}
+}
+
+func TestLatest_ReturnsNewest(t *testing.T) {
+	r := NewRing(10)
+	r.Push(1)
+	r.Push(2)
+	r.Push(3)
+	v, ok := r.Latest()
+	if !ok || v != 3 {
+		t.Errorf("Latest() = (%v, %v), want (3, true)", v, ok)
+	}
+}
+
+func TestLatest_AfterOverflow(t *testing.T) {
+	r := NewRing(3)
+	for i := 0; i < 100; i++ {
+		r.Push(float64(i))
+	}
+	v, ok := r.Latest()
+	if !ok || v != 99 {
+		t.Errorf("Latest() = (%v, %v), want (99, true)", v, ok)
+	}
+}
+
+// =========================================================================
+// Outliers
+// =========================================================================
+
+func TestStats_Outliers(t *testing.T) {
+	r := NewRing(100)
+	// Push 98 values clustered around 50, then 2 extreme values.
+	for i := 0; i < 98; i++ {
+		r.Push(50 + float64(i%3)) // 50, 51, 52 repeating
+	}
+	r.Push(200) // outlier high
+	r.Push(-100) // outlier low
+
+	s := r.Stats()
+	if s.Outliers < 2 {
+		t.Errorf("Outliers = %d, want at least 2", s.Outliers)
+	}
+}
+
+func TestStats_NoOutliers_ConstantData(t *testing.T) {
+	r := NewRing(100)
+	for i := 0; i < 50; i++ {
+		r.Push(42)
+	}
+	s := r.Stats()
+	if s.Outliers != 0 {
+		t.Errorf("Outliers = %d, want 0 for constant data", s.Outliers)
+	}
+}
+
+// =========================================================================
 // Position & Since — streaming consumer API
 // =========================================================================
 

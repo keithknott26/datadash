@@ -162,6 +162,19 @@ type Stats struct {
 	Min, Max, Mean, StdDev float64
 	P50, P95, P99          float64
 	Count                  int
+	Outliers               int // values beyond mean ± 2σ
+}
+
+// Latest returns the most recently pushed value and true, or (0, false)
+// if the ring is empty.
+func (r *Ring) Latest() (float64, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.len.Load() == 0 {
+		return 0, false
+	}
+	pos := r.pos.Load()
+	return r.buf[(pos-1+r.cap)%r.cap], true
 }
 
 // Stats computes summary statistics over the current buffer contents.
@@ -219,6 +232,17 @@ func computeStats(vals []float64) Stats {
 	s.P50 = percentile(sorted, 50)
 	s.P95 = percentile(sorted, 95)
 	s.P99 = percentile(sorted, 99)
+
+	// Outliers: values beyond mean ± 2σ
+	if s.StdDev > 0 {
+		lo := s.Mean - 2*s.StdDev
+		hi := s.Mean + 2*s.StdDev
+		for _, v := range vals {
+			if v < lo || v > hi {
+				s.Outliers++
+			}
+		}
+	}
 
 	return s
 }

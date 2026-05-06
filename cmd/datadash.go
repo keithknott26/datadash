@@ -36,7 +36,7 @@ const (
 	appVersion     = "0.5.0"
 	maxSeries      = 8
 	defaultRingCap = 8192
-	statsPercent   = 22
+	statsPercent   = 18
 
 	// brailleMultiplier controls how many points we feed per chart cell.
 	// termdash's linechart renders lines using braille characters which
@@ -246,6 +246,9 @@ func runApp(cmd *cobra.Command, args []string) error {
 	sm := newSeriesManager(numSeries, ringCap)
 	sm.setHeaders(headers)
 	sm.push(firstRow.Values)
+	if firstRow.Label != "" {
+		sm.setLastLabel(firstRow.Label)
+	}
 	vs := newViewState()
 	showHelp := &atomBool{}
 
@@ -286,6 +289,9 @@ func runApp(cmd *cobra.Command, args []string) error {
 				continue
 			}
 			sm.push(row.Values)
+		if row.Label != "" {
+			sm.setLastLabel(row.Label)
+		}
 			if cfg.seek > 0 {
 				time.Sleep(cfg.seek)
 			}
@@ -588,21 +594,21 @@ func buildPanelGrid(panels []chartPanel) []container.Option {
 	}
 }
 
-// rowFor builds a single chart-plus-stats row.
+// rowFor builds a single row: stats on the left, chart on the right.
 func rowFor(p chartPanel) []container.Option {
 	return []container.Option{
 		container.SplitVertical(
 			container.Left(
 				container.Border(linestyle.Light),
+				container.PlaceWidget(p.statsWidget),
+			),
+			container.Right(
+				container.Border(linestyle.Light),
 				container.BorderTitle(p.title),
 				container.BorderColor(p.color),
 				container.PlaceWidget(p.widget),
 			),
-			container.Right(
-				container.Border(linestyle.Light),
-				container.PlaceWidget(p.statsWidget),
-			),
-			container.SplitPercent(100-statsPercent),
+			container.SplitPercent(statsPercent),
 		),
 	}
 }
@@ -648,14 +654,23 @@ func refreshPanelStats(p *chartPanel, sm *seriesManager, showHelp bool) {
 		return
 	}
 
+	latest, _ := sm.latest(p.idx)
+
+	// Use the row's label column (e.g. timestamp from the data) if
+	// present; fall back to wall-clock time for streams without labels.
+	timeStr := time.Now().Format("15:04:05")
+	if label := sm.label(); label != "" {
+		timeStr = label
+	}
+
+	b.WriteString(fmt.Sprintf(" Time    %s\n", timeStr))
+	b.WriteString(fmt.Sprintf(" Value   %s\n", datadash.FormatValue(latest)))
+	b.WriteString(fmt.Sprintf(" Count   %d\n", st.Count))
 	b.WriteString(fmt.Sprintf(" Min     %s\n", datadash.FormatValue(st.Min)))
-	b.WriteString(fmt.Sprintf(" Max     %s\n", datadash.FormatValue(st.Max)))
 	b.WriteString(fmt.Sprintf(" Mean    %s\n", datadash.FormatValue(st.Mean)))
-	b.WriteString(fmt.Sprintf(" StdDev  %s\n", datadash.FormatValue(st.StdDev)))
-	b.WriteString(fmt.Sprintf(" P50     %s\n", datadash.FormatValue(st.P50)))
-	b.WriteString(fmt.Sprintf(" P95     %s\n", datadash.FormatValue(st.P95)))
-	b.WriteString(fmt.Sprintf(" P99     %s\n", datadash.FormatValue(st.P99)))
-	b.WriteString(fmt.Sprintf(" N       %d\n", st.Count))
+	b.WriteString(fmt.Sprintf(" Median  %s\n", datadash.FormatValue(st.P50)))
+	b.WriteString(fmt.Sprintf(" Max     %s\n", datadash.FormatValue(st.Max)))
+	b.WriteString(fmt.Sprintf(" Outlier %d\n", st.Outliers))
 
 	_ = p.statsWidget.Write(b.String())
 }
@@ -796,10 +811,11 @@ func (v *viewState) get() (int, float64) {
 // =========================================================================
 
 type seriesManager struct {
-	mu      sync.RWMutex
-	rings   []*datadash.Ring
-	headers []string
-	count   int
+	mu        sync.RWMutex
+	rings     []*datadash.Ring
+	headers   []string
+	count     int
+	lastLabel string // most recent X-axis label from the data
 }
 
 func newSeriesManager(numSeries, capacity int) *seriesManager {
@@ -912,6 +928,27 @@ func (sm *seriesManager) stats(idx int) datadash.Stats {
 		return datadash.Stats{}
 	}
 	return sm.rings[idx].Stats()
+}
+
+func (sm *seriesManager) latest(idx int) (float64, bool) {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	if idx >= sm.count {
+		return 0, false
+	}
+	return sm.rings[idx].Latest()
+}
+
+func (sm *seriesManager) setLastLabel(label string) {
+	sm.mu.Lock()
+	sm.lastLabel = label
+	sm.mu.Unlock()
+}
+
+func (sm *seriesManager) label() string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return sm.lastLabel
 }
 
 // =========================================================================
