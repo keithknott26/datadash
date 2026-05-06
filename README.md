@@ -9,7 +9,7 @@
 
 DataDash turns streams or files of numbers into beautiful, interactive charts — no GUI, no browser, no cloud. Pipe in CSV, TSV, JSON, or hit an HTTP endpoint, and watch your data come to life with sub-cell braille resolution, per-series panels, live statistics, and full keyboard navigation.
 
-![datadash streaming](images/4col-scrolling.gif)
+![datadash streaming](https://github.com/keithknott26/datadash/blob/8ac10c4bcfb2477baf4797408424563551c50d34/images/4col-scrolling.gif?raw=true)
 
 ---
 
@@ -112,7 +112,7 @@ seq 4000 | awk 'BEGIN{OFS="\t"; print "x"}{x=$1/10; print cos(x); system("sleep 
   | datadash --label-mode time --scroll
 ```
 
-![streaming line](images/1col-scrolling.gif)
+![streaming line](https://github.com/keithknott26/datadash/blob/8ac10c4bcfb2477baf4797408424563551c50d34/images/1col-scrolling.gif?raw=true)
 
 ### Streaming data (bar chart)
 
@@ -121,7 +121,7 @@ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)","rand(x)","rand(x)"}
   | datadash --chart bar
 ```
 
-![streaming bar](images/4col-barchart.gif)
+![streaming bar](https://github.com/keithknott26/datadash/blob/8ac10c4bcfb2477baf4797408424563551c50d34/images/4col-barchart.gif?raw=true)
 
 ### Streaming data (sparklines)
 
@@ -130,8 +130,6 @@ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)","rand(x)","rand(x)"}
   | datadash --chart sparkline
 ```
 
-![streaming sparkline](images/4col-sparkline.gif)
-
 ### Tabular data with rolling average
 
 ```bash
@@ -139,7 +137,7 @@ seq 4000 | awk 'BEGIN{OFS="\t"; print "x","sin(x)","cos(x)","rand(x)","rand(x)",
   | datadash -a
 ```
 
-![6-column with average](images/4col-scrolling.gif)
+![6-column with average](https://github.com/keithknott26/datadash/blob/8ac10c4bcfb2477baf4797408424563551c50d34/images/4col-scrolling.gif?raw=true)
 
 ### JSON / NDJSON streams
 
