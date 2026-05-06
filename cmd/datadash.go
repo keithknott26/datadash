@@ -245,10 +245,17 @@ func runApp(cmd *cobra.Command, args []string) error {
 	// ── Data layer ─────────────────────────────────────────────────────
 	sm := newSeriesManager(numSeries, ringCap)
 	sm.setHeaders(headers)
-	sm.push(firstRow.Values)
-	if firstRow.Label != "" {
-		sm.setLastLabel(firstRow.Label)
+
+	// Set X-axis label BEFORE push — push stores it in the label ring.
+	switch cfg.labelMode {
+	case "time":
+		sm.setLastLabel(time.Now().Format("15:04:05"))
+	default:
+		if firstRow.Label != "" {
+			sm.setLastLabel(firstRow.Label)
+		}
 	}
+	sm.push(firstRow.Values)
 	vs := newViewState()
 	showHelp := &atomBool{}
 
@@ -288,10 +295,16 @@ func runApp(cmd *cobra.Command, args []string) error {
 				slog.Debug("skip line", "err", err)
 				continue
 			}
+			// Set X-axis label BEFORE push — push stores it in the label ring.
+			switch cfg.labelMode {
+			case "time":
+				sm.setLastLabel(time.Now().Format("15:04:05"))
+			default:
+				if row.Label != "" {
+					sm.setLastLabel(row.Label)
+				}
+			}
 			sm.push(row.Values)
-		if row.Label != "" {
-			sm.setLastLabel(row.Label)
-		}
 			if cfg.seek > 0 {
 				time.Sleep(cfg.seek)
 			}
@@ -469,9 +482,19 @@ func newLinePanel(idx int, color cell.Color, title string) (chartPanel, error) {
 		}
 		data := downsampleFor(raw, target)
 
-		_ = lc.Series("data", data,
+		// Build X-axis time labels.
+		seriesOpts := []linechart.SeriesOption{
 			linechart.SeriesCellOpts(cell.FgColor(color)),
-		)
+		}
+		if cfg.labelMode != "none" {
+			labels := sm.sliceLabels(chartWidth, offset, zoom)
+			if xlm := spacedLabels(labels, len(data)); xlm != nil {
+				seriesOpts = append(seriesOpts, linechart.SeriesXLabels(xlm))
+			}
+		}
+
+		_ = lc.Series("data", data, seriesOpts...)
+
 		if cfg.showAvg && len(data) > 1 {
 			_ = lc.Series("avg",
 				rollingAverage(data, cfg.avgWindow),
@@ -776,6 +799,27 @@ func rollingAverage(data []float64, window int) []float64 {
 	return avg
 }
 
+// spacedLabels maps label strings onto data indices for the linechart's
+// SeriesXLabels option. It covers EVERY index so the chart never falls
+// back to showing raw numeric indices. The linechart internally picks
+// which labels to render based on available width.
+func spacedLabels(labels []string, dataLen int) map[int]string {
+	if len(labels) == 0 || dataLen == 0 {
+		return nil
+	}
+	result := make(map[int]string, dataLen)
+	scale := float64(len(labels)) / float64(dataLen)
+
+	for i := 0; i < dataLen; i++ {
+		li := int(float64(i) * scale)
+		if li >= len(labels) {
+			li = len(labels) - 1
+		}
+		result[i] = labels[li]
+	}
+	return result
+}
+
 // =========================================================================
 // View state
 // =========================================================================
@@ -815,7 +859,15 @@ type seriesManager struct {
 	rings     []*datadash.Ring
 	headers   []string
 	count     int
-	lastLabel string // most recent X-axis label from the data
+	lastLabel string
+
+	// Parallel X-axis label buffer — one label per push, same cadence
+	// as the data rings. Used to show HH:MM:SS or first-column labels
+	// on the line chart X-axis.
+	xlabels   []string
+	xlabelPos int
+	xlabelCap int
+	xlabelLen int
 }
 
 func newSeriesManager(numSeries, capacity int) *seriesManager {
@@ -826,7 +878,12 @@ func newSeriesManager(numSeries, capacity int) *seriesManager {
 	for i := range rings {
 		rings[i] = datadash.NewRing(capacity)
 	}
-	return &seriesManager{rings: rings, count: numSeries}
+	return &seriesManager{
+		rings:     rings,
+		count:     numSeries,
+		xlabels:   make([]string, capacity),
+		xlabelCap: capacity,
+	}
 }
 
 func (sm *seriesManager) push(values []float64) {
@@ -842,6 +899,13 @@ func (sm *seriesManager) push(values []float64) {
 	}
 	for i := 0; i < sm.count && i < len(values); i++ {
 		sm.rings[i].Push(values[i])
+	}
+
+	// Store the pending X-axis label (set via setNextXLabel before push).
+	sm.xlabels[sm.xlabelPos%sm.xlabelCap] = sm.lastLabel
+	sm.xlabelPos++
+	if sm.xlabelLen < sm.xlabelCap {
+		sm.xlabelLen++
 	}
 }
 
@@ -949,6 +1013,51 @@ func (sm *seriesManager) label() string {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	return sm.lastLabel
+}
+
+// sliceLabels returns X-axis labels for the same window that slice()
+// would return for data. The indices are synchronized because push
+// stores one label per row.
+func (sm *seriesManager) sliceLabels(visibleWidth, offset int, zoom float64) []string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	n := sm.xlabelLen
+	if n == 0 {
+		return nil
+	}
+
+	window := int(float64(visibleWidth*brailleMultiplier) * zoom)
+	if window < 10 {
+		window = 10
+	}
+	if window > n {
+		window = n
+	}
+
+	end := n - offset
+	if end > n {
+		end = n
+	}
+	if end <= 0 {
+		return nil
+	}
+	start := end - window
+	if start < 0 {
+		start = 0
+	}
+
+	count := end - start
+	result := make([]string, count)
+	oldest := sm.xlabelPos - sm.xlabelLen
+	for i := 0; i < count; i++ {
+		idx := (oldest + start + i) % sm.xlabelCap
+		if idx < 0 {
+			idx += sm.xlabelCap
+		}
+		result[i] = sm.xlabels[idx]
+	}
+	return result
 }
 
 // =========================================================================
