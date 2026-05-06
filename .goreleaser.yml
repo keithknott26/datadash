@@ -1,0 +1,88 @@
+version: 2
+
+project_name: datadash
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: datadash
+    main: ./cmd
+    binary: datadash
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE
+      - tools/sampledata/**/*
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  github:
+    owner: keithknott26
+    name: datadash
+
+# Homebrew formula — `brews` is deprecated in GoReleaser v2 but still
+# fully functional. The release will succeed with a warning.
+brews:
+  - repository:
+      owner: keithknott26
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/keithknott26/datadash"
+    description: "Visualize and graph streaming data in the terminal"
+    license: MIT
+    test: |
+      system "#{bin}/datadash", "--version"
+    install: |
+      bin.install "datadash"
+
+nfpms:
+  - id: packages
+    package_name: datadash
+    vendor: keithknott26
+    homepage: "https://github.com/keithknott26/datadash"
+    maintainer: Keith Knott
+    description: "Visualize and graph streaming data in the terminal"
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin

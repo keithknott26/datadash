@@ -1,18 +1,21 @@
 module github.com/keithknott26/datadash
 
-go 1.19
+go 1.22
 
 require (
-	github.com/andrew-d/go-termutil v0.0.0-20150726205930-009166a695a2
-	github.com/montanaflynn/stats v0.7.0
-	github.com/mum4k/termdash v0.18.0
-	gopkg.in/alecthomas/kingpin.v2 v2.2.6
+	github.com/mum4k/termdash v0.20.0
+	github.com/spf13/cobra v1.8.1
 )
 
 require (
-	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
-	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
-	github.com/mattn/go-runewidth v0.0.14 // indirect
-	github.com/nsf/termbox-go v1.1.1 // indirect
-	github.com/rivo/uniseg v0.4.4 // indirect
+	github.com/gdamore/encoding v1.0.0 // indirect
+	github.com/gdamore/tcell/v2 v2.7.4 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
+	github.com/mattn/go-runewidth v0.0.15 // indirect
+	github.com/rivo/uniseg v0.4.3 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
+	golang.org/x/sys v0.17.0 // indirect
+	golang.org/x/term v0.17.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 )

@@ -1,22 +1,12 @@
-#!/usr/bin/env -S docker build --compress -t keithknott26/datadash -f
+FROM golang:1.22-alpine AS build
 
-FROM debian as build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /datadash ./cmd
 
-RUN apt update
-RUN apt install -y gcc git curl
-
-RUN curl -skL https://dl.google.com/go/go1.13.linux-amd64.tar.gz \
-	| tar --strip-components=0 -xzC /usr/local
-
-ENV PATH "$PATH:/usr/local/go/bin"
-
-WORKDIR /root/go/src/github.com/keithknott26/datadash
-COPY ./ ./
-RUN echo get build test install | xargs -n1 | xargs -n1 -I% -- go % .
-RUN echo     build      install | xargs -n1 | xargs -n1 -I% -- go % ./cmd/datadash.go
-
-FROM debian
+FROM alpine:3.20
+COPY --from=build /datadash /usr/local/bin/datadash
 WORKDIR /data
-COPY --from=build /root/go/bin/datadash /usr/local/bin/datadash
-ENTRYPOINT [ "/usr/local/bin/datadash" ]
-CMD        [ ]
+ENTRYPOINT ["datadash"]

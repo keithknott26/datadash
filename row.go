@@ -1,638 +1,537 @@
 package datadash
 
 import (
-	"context"
+	"bufio"
+	"encoding/json"
 	"fmt"
-	"time"
-
-	"github.com/montanaflynn/stats"
-	"github.com/mum4k/termdash/cell"
-	"github.com/mum4k/termdash/container"
-	"github.com/mum4k/termdash/linestyle"
-	"github.com/mum4k/termdash/widgets/barchart"
-	"github.com/mum4k/termdash/widgets/linechart"
-	"github.com/mum4k/termdash/widgets/sparkline"
-	"github.com/mum4k/termdash/widgets/text"
+	"io"
+	"math"
+	"strconv"
+	"strings"
+	"unicode"
 )
 
-type Panel interface {
-	NewRow() *Row
-	InitWidgets() *Row
-	NewContainer() []container.Option
-	Update()
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+// Format describes the detected or forced input format.
+type Format int
+
+const (
+	FormatAuto  Format = iota // sniff from first line
+	FormatCSV                 // comma-delimited
+	FormatTSV                 // tab-delimited
+	FormatSpace               // whitespace-delimited
+	FormatJSON                // newline-delimited JSON objects
+	FormatSingle              // one number per line
+)
+
+func (f Format) String() string {
+	switch f {
+	case FormatCSV:
+		return "csv"
+	case FormatTSV:
+		return "tsv"
+	case FormatSpace:
+		return "space"
+	case FormatJSON:
+		return "json"
+	case FormatSingle:
+		return "single"
+	default:
+		return "auto"
+	}
 }
 
-// row types
-const (
-	scrolling = iota
-	line
-	bar
-)
+// ParseFormat converts a CLI string to a Format constant.
+func ParseFormat(s string) Format {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "csv":
+		return FormatCSV
+	case "tsv":
+		return FormatTSV
+	case "space":
+		return FormatSpace
+	case "json", "ndjson":
+		return FormatJSON
+	case "single":
+		return FormatSingle
+	default:
+		return FormatAuto
+	}
+}
 
-// sort mode of counter panel
-const (
-	sort_none = iota
-	sort_alphabetical
-	sort_numeric
-)
-
-var (
-	parOneBorder     = 26
-	parOneTitle      = 82
-	parTwoBorder     = 25
-	parTwoTitle      = 13
-	parThreeBorder   = 25
-	parThreeTitle    = 45
-	parFourBorder    = 25
-	parFourTitle     = 9
-	parFiveTitle     = 165
-	parFiveBorder    = 25
-	parText          = 3
-	parPointer       = 248
-	parValue         = 15
-	graphOneBorder   = 25
-	graphTwoBorder   = 25
-	graphThreeBorder = 25
-	graphFourBorder  = 25
-	graphFiveBorder  = 25
-	graphAxes        = 8
-	graphXLabels     = 248
-	graphYLabels     = 15
-	graphTitles      = 2
-	lineLow          = 235
-	lineAvg          = 235
-	lineHigh         = 239
-	graphLineOne     = 82
-	graphLineTwo     = 13
-	graphLineThree   = 45
-	graphLineFour    = 9
-	graphLineFive    = 165
-	graphLinePaused  = 1
-	ctx              context.Context
-)
-
-//type RowInterface interface {
-//	NewRow()      // same as adding the methods of ReadWriter
-//	InitWidgets() // same as adding the methods of Locker
-//	returnChart()
-//}
-
+// Row is a single parsed record.
 type Row struct {
-	ID               int
-	Label            string
-	Scroll           bool
-	Average          bool
-	Labels           *stringRingBuffer
-	Context          context.Context
-	Data             *float64RingBuffer
-	Averages         *float64RingBuffer
-	LineChart        *linechart.LineChart
-	YAxisAdaptive    bool
-	BarChart         *barchart.BarChart
-	SparkLine        *sparkline.SparkLine
-	Textbox          *text.Text
-	DataContainer    []float64
-	LabelContainer   []string
-	AverageContainer []float64
-	RedrawInterval   time.Duration
-	SeekInterval     time.Duration
+	Values []float64
+	Label  string // optional X-axis label (first column or timestamp)
 }
 
-//func (self *Row) increment() {
-//	self.id++
-//}
+// ---------------------------------------------------------------------------
+// Reader options
+// ---------------------------------------------------------------------------
 
-func NewRow(ctx context.Context, label string, bufsize int, id int, scroll bool, average bool, yAxisAdaptive bool) *Row {
-	row := &Row{
-		ID:            id,
-		Scroll:        scroll,
-		YAxisAdaptive: yAxisAdaptive,
-		Average:       average,
-		Label:         label,
-		Context:       ctx,
-		Data:          newFloat64RingBuffer(bufsize),
-		Labels:        newStringRingBuffer(bufsize),
-		Averages:      newFloat64RingBuffer(bufsize),
-	}
-	return row
+// ReaderOption configures a Reader.
+type ReaderOption func(*Reader)
+
+// WithFormat forces a specific input format instead of auto-detecting.
+func WithFormat(f Format) ReaderOption {
+	return func(r *Reader) { r.format = f }
 }
 
-func (r *Row) InitWidgets(ctx context.Context, graphType string, label string, reDrawInterval time.Duration, seekInterval time.Duration) *Row {
-	r.Label = label
-	r.RedrawInterval = reDrawInterval
-	r.SeekInterval = seekInterval
-	r.Textbox = r.newTextBox(ctx, label)
-	r.LineChart = r.newLineChart(ctx)
-
-	if graphType == "bar" {
-		r.BarChart = r.newBarChart(ctx)
-	}
-	if graphType == "spark" {
-		r.SparkLine = r.newSparkLine(ctx)
-	}
-	return r
+// WithDelimiter overrides the auto-detected delimiter for CSV/TSV.
+func WithDelimiter(d string) ReaderOption {
+	return func(r *Reader) { r.forcedDelim = d }
 }
 
-func (r *Row) newLineChart(ctx context.Context) *linechart.LineChart {
-	lc, err := r.createLineChart(ctx)
-	if err != nil {
-		fmt.Println("LineChart Error:", err)
-	}
-	return lc
-}
-func (r *Row) newTextBox(ctx context.Context, label string) *text.Text {
-	t, err := r.newText(ctx, label)
-	if err != nil {
-		fmt.Println("TextBox Error:", err)
-	}
-	return t
+// WithJSONFields specifies dot-path fields to extract from JSON objects.
+// If empty, all top-level numeric fields are auto-discovered.
+func WithJSONFields(fields []string) ReaderOption {
+	return func(r *Reader) { r.jsonFields = fields }
 }
 
-func (r *Row) newBarChart(ctx context.Context) *barchart.BarChart {
-	bc, err := r.createBarGraph(ctx)
-	if err != nil {
-		fmt.Println("BarGraph Error:", err)
-	}
-	return bc
+// WithLabelMode sets how the X-axis label is derived.
+//
+//	"first" — use the first column as a label (default for multi-column)
+//	"time"  — use wall-clock time as the label
+//	"none"  — no labels
+func WithLabelMode(mode string) ReaderOption {
+	return func(r *Reader) { r.labelMode = strings.ToLower(mode) }
 }
 
-func (r *Row) newSparkLine(ctx context.Context) *sparkline.SparkLine {
-	bc, err := r.createSparkLine(ctx)
-	if err != nil {
-		fmt.Println("Sparkline Error:", err)
-	}
-	return bc
+// ---------------------------------------------------------------------------
+// Reader
+// ---------------------------------------------------------------------------
+
+// Reader wraps a buffered scanner and produces Rows.
+type Reader struct {
+	scanner    *bufio.Scanner
+	format     Format
+	forcedDelim string
+	delimiter  string // resolved after sniffing
+	labelMode  string
+	jsonFields []string
+
+	headers  []string
+	detected bool // true after the first line has been inspected
+	lineNum  int
 }
 
-func (r *Row) ContainerOptions(ctx context.Context, graphType string) []container.Option {
-	var ParBorder int
-	var GraphBorder int
-	var row []container.Option
-	switch r.ID {
-	case 0:
-		GraphBorder = graphOneBorder
-		ParBorder = parOneBorder
-	case 1:
-		GraphBorder = graphOneBorder
-		ParBorder = parOneBorder
-	case 2:
-		GraphBorder = graphTwoBorder
-		ParBorder = parTwoBorder
-	case 3:
-		GraphBorder = graphThreeBorder
-		ParBorder = parThreeBorder
-	case 4:
-		GraphBorder = graphFourBorder
-		ParBorder = parFourBorder
-	case 5:
-		GraphBorder = graphFiveBorder
-		ParBorder = parFiveBorder
+// NewReader creates a streaming row reader. By default it auto-detects
+// the format and delimiter from the first line of input.
+func NewReader(r io.Reader, opts ...ReaderOption) *Reader {
+	rd := &Reader{
+		scanner:   bufio.NewScanner(r),
+		format:    FormatAuto,
+		labelMode: "first",
 	}
-	switch graphType {
-	case "line":
-		row = []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(linestyle.Round),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParBorder)),
-					container.PlaceWidget(r.Textbox),
-				),
-				container.Right(
-					container.Border(linestyle.Round),
-					container.BorderTitle(r.Label+" - 'q' Quit | 'p' Pause 10s | <- Slow | Resume -> | Scroll to Zoom..."),
-					container.BorderColor(cell.ColorNumber(GraphBorder)),
-					container.PlaceWidget(r.LineChart),
-				),
-				container.SplitPercent(15),
-			)}
-	case "bar":
-		row = []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(linestyle.Round),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParBorder)),
-					container.PlaceWidget(r.Textbox),
-				),
-				container.Right(
-					container.Border(linestyle.Round),
-					container.BorderTitle(r.Label+" - 'q' Quit | 'p' Pause 10s | <- Slow | Resume -> | Scroll to Zoom..."),
-					container.BorderColor(cell.ColorNumber(GraphBorder)),
-					container.PlaceWidget(r.BarChart),
-				),
-				container.SplitPercent(15),
-			)}
-	case "spark":
-		row = []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(linestyle.Round),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParBorder)),
-					container.PlaceWidget(r.Textbox),
-				),
-				container.Right(
-					container.Border(linestyle.Round),
-					container.BorderTitle(r.Label+" - 'q' Quit | 'p' Pause 10s | <- Slow | Resume -> | Scroll to Zoom..."),
-					container.BorderColor(cell.ColorNumber(GraphBorder)),
-					container.PlaceWidget(r.SparkLine),
-				),
-				container.SplitPercent(15),
-			)}
-	default:
-		row = []container.Option{
-			container.SplitVertical(
-				container.Left(
-					container.Border(linestyle.Round),
-					container.BorderTitle("Statistics"),
-					container.BorderTitleAlignCenter(),
-					container.BorderColor(cell.ColorNumber(ParBorder)),
-					container.PlaceWidget(r.Textbox),
-				),
-				container.Right(
-					container.Border(linestyle.Round),
-					container.BorderTitle(r.Label+" - 'q' Quit | 'p' Pause 10s | <- Slow | Resume -> | Scroll to Zoom..."),
-					container.BorderColor(cell.ColorNumber(GraphBorder)),
-					container.PlaceWidget(r.LineChart),
-				),
-				container.SplitPercent(15),
-			)}
+	// Increase scanner buffer for wide rows (default 64 KB → 1 MB).
+	rd.scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	for _, o := range opts {
+		o(rd)
 	}
-	return row
+	return rd
 }
 
-func (r *Row) newText(ctx context.Context, label string) (*text.Text, error) {
-	var ParTitle int
-	switch r.ID {
-	case 0:
-		ParTitle = parOneTitle
-	case 1:
-		ParTitle = parOneTitle
-	case 2:
-		ParTitle = parTwoTitle
-	case 3:
-		ParTitle = parThreeTitle
-	case 4:
-		ParTitle = parFourTitle
-	case 5:
-		ParTitle = parFiveTitle
-	}
+// Headers returns column headers discovered from the first line.
+// Returns nil if headers haven't been detected yet or the format has
+// no header row.
+func (rd *Reader) Headers() []string { return rd.headers }
 
-	t, err := text.New()
-	context := ctx
-	go periodic(context, r.RedrawInterval/2, func() error {
-		defer func() {
-			recover()
-		}()
-		pointer := r.Labels.Last(1)
-		value := r.Data.Last(1)
-		data := prepareStats(r, r.Data)
-		t.Reset()
-		if err := t.Write(fmt.Sprintf("%s", label), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(ParTitle)))); err != nil {
-			return err
+// Format returns the resolved format (after at least one Read call).
+func (rd *Reader) Format() Format { return rd.format }
+
+// Read returns the next Row. Returns io.EOF at end of input.
+func (rd *Reader) Read() (Row, error) {
+	for {
+		if !rd.scanner.Scan() {
+			if err := rd.scanner.Err(); err != nil {
+				return Row{}, fmt.Errorf("line %d: %w", rd.lineNum, err)
+			}
+			return Row{}, io.EOF
 		}
-		if err := t.Write(fmt.Sprintf("\nTime:        %s", pointer), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(parPointer)))); err != nil {
-			return err
-		}
-		if err := t.Write(fmt.Sprintf("\nValue:       %.2f", value), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(parValue)))); err != nil {
-			return err
-		}
-		if err := t.Write(fmt.Sprintf("%s", data), text.WriteCellOpts(cell.FgColor(cell.ColorNumber(parText)))); err != nil {
-			return err
-		}
-		return nil
-	})
-	return t, err
-}
-func (r *Row) createBarGraph(ctx context.Context) (*barchart.BarChart, error) {
-	var ParTitle int
-	switch r.ID {
-	case 0:
-		ParTitle = parOneTitle
-	case 1:
-		ParTitle = parOneTitle
-	case 2:
-		ParTitle = parTwoTitle
-	case 3:
-		ParTitle = parThreeTitle
-	case 4:
-		ParTitle = parFourTitle
-	case 5:
-		ParTitle = parFiveTitle
-	}
-	barcolors := make([]cell.Color, 0, 0)
-	valuecolors := make([]cell.Color, 0, 0)
-	for i := 1; i <= 100; i++ {
-		barcolors = append(barcolors, cell.ColorNumber(ParTitle))
-	}
-	for i := 1; i <= 100; i++ {
-		valuecolors = append(valuecolors, cell.ColorBlack)
-	}
-	bc, err := barchart.New(
-		barchart.BarColors(barcolors),
-		barchart.ValueColors(valuecolors),
-		barchart.ShowValues(),
-		barchart.BarWidth(3),
-	)
+		rd.lineNum++
+		line := rd.scanner.Text()
 
-	if err != nil {
-		return nil, err
-	}
-	go periodic(ctx, r.RedrawInterval, func() error {
-		defer func() {
-			recover()
-		}()
-		var inputs []float64
+		// Skip blank lines.
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
 
-		inputs = r.Data.Last(bc.ValueCapacity())
-		values := make([]int, 0)
-		//use averages instead //TODO
-		if r.Average == true {
-			//averages
-			inputs = r.Averages.Last(bc.ValueCapacity())
-		}
-		for _, x := range inputs {
-			values = append(values, round(x))
-		}
-		max := values[0] // assume first value is the smallest
-		for _, value := range values {
-			if value > max {
-				max = value // found another smaller value, replace previous value in max
+		// First non-blank line: detect format, possibly consume as header.
+		if !rd.detected {
+			rd.detected = true
+			if err := rd.detect(line); err != nil {
+				return Row{}, fmt.Errorf("line %d: %w", rd.lineNum, err)
+			}
+			// If the first line was consumed as a header, loop for data.
+			if rd.headers != nil && rd.format != FormatJSON {
+				continue
 			}
 		}
 
-		return bc.Values(values, max+1)
-	})
-	return bc, err
-
+		row, err := rd.parseLine(line)
+		if err != nil {
+			// Skip unparseable lines in streaming mode.
+			continue
+		}
+		return row, nil
+	}
 }
 
-func (r *Row) createSparkLine(ctx context.Context) (*sparkline.SparkLine, error) {
-	var ParTitle int
-	switch r.ID {
-	case 0:
-		ParTitle = parOneTitle
-	case 1:
-		ParTitle = parOneTitle
-	case 2:
-		ParTitle = parTwoTitle
-	case 3:
-		ParTitle = parThreeTitle
-	case 4:
-		ParTitle = parFourTitle
-	case 5:
-		ParTitle = parFiveTitle
-	}
+// ---------------------------------------------------------------------------
+// Detection
+// ---------------------------------------------------------------------------
 
-	sl, err := sparkline.New(
-		sparkline.Color(cell.Color(ParTitle)),
-	)
-	if err != nil {
-		panic(err)
-	}
-	go periodic(ctx, r.RedrawInterval*4, func() error {
-		defer func() {
-			recover()
-		}()
-		var inputs []float64
-
-		inputs = r.Data.Last(1)
-		values := make([]int, 0)
-		//use averages instead //TODO
-		if r.Average == true {
-			//averages
-			inputs = r.Averages.Last(sl.ValueCapacity())
-		}
-		for _, x := range inputs {
-			// display only positive numbers since this is required by sparkline
-			if round(x) > 0 {
-				values = append(values, round(x))
-			}
-		}
-		max := values[0] // assume first value is the smallest
-		for _, value := range values {
-			if value > max {
-				max = value // found another smaller value, replace previous value in max
-			}
-		}
-		return sl.Add(values)
-	})
-	return sl, err
-
-}
-
-func (r *Row) createLineChart(ctx context.Context) (*linechart.LineChart, error) {
-	//set the line color based on the r.ID
-	var GraphLine int
-	var lc *linechart.LineChart
-	var err error
-
-	switch r.ID {
-	case 0:
-		GraphLine = graphLineOne
-	case 1:
-		GraphLine = graphLineOne
-	case 2:
-		GraphLine = graphLineTwo
-	case 3:
-		GraphLine = graphLineThree
-	case 4:
-		GraphLine = graphLineFour
-	case 5:
-		GraphLine = graphLineFive
-	default:
-		GraphLine = 10
-	}
-
-	if r.Scroll == true {
-		if r.YAxisAdaptive == true {
-			lc, err = linechart.New(
-				linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
-				linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
-				linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
-				linechart.XAxisUnscaled(),
-				linechart.YAxisAdaptive(),
-			)
-		} else {
-			lc, err = linechart.New(
-				linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
-				linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
-				linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
-				linechart.XAxisUnscaled(),
-			)
-		}
-	} else {
-		if r.YAxisAdaptive == true {
-			lc, err = linechart.New(
-				linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
-				linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
-				linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
-				linechart.YAxisAdaptive(),
-			)
-		} else {
-			lc, err = linechart.New(
-				linechart.AxesCellOpts(cell.FgColor(cell.ColorNumber(graphAxes))),
-				linechart.YLabelCellOpts(cell.FgColor(cell.ColorNumber(graphYLabels))),
-				linechart.XLabelCellOpts(cell.FgColor(cell.ColorNumber(graphXLabels))),
-			)
-		}
-	}
-	inputs := r.Data.buffer
-	if err != nil {
-		fmt.Println("LineChart Error:", err)
-	}
-	//step1 = (step1 + 1) % len(inputs)
-	if err := lc.Series("first", inputs,
-		linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLine))),
-	); err != nil {
-		fmt.Println("LineChart Error:", err)
-	}
-
-	step := 0
-	go periodic(ctx, time.Duration(r.RedrawInterval), func() error {
-		defer func() {
-			recover()
-		}()
-		var inputs []float64
-		var inputLabels []string
-		var averages []float64
-		var graphWidth int
-
-		if r.Scroll == true {
-			graphWidth = lc.ValueCapacity()
-			inputs = r.Data.Last(graphWidth)
-			inputLabels = r.Labels.Last(graphWidth)
-			averages = r.Averages.Last(graphWidth)
-		} else {
-			//only scroll if we've reached 5000 records
-			inputs = r.DataContainer
-			inputLabels = r.LabelContainer
-			averages = r.AverageContainer
-		}
-		var labelMap = map[int]string{}
-		for i, x := range inputLabels {
-			labelMap[i] = x
-		}
-		if err := lc.Series("first", inputs,
-			linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(GraphLine))),
-			linechart.SeriesXLabels(labelMap),
-		); err != nil {
-			return err
-		}
-		if r.Average == true {
-			if step%10 == 1 {
-				if err := lc.Series("average", averages,
-					linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(lineHigh))),
-					linechart.SeriesXLabels(labelMap),
-				); err != nil {
+func (rd *Reader) detect(line string) error {
+	// If format was forced, resolve delimiter and discover JSON fields.
+	if rd.format != FormatAuto {
+		rd.resolveDelimiter()
+		if rd.format == FormatJSON {
+			trimmed := strings.TrimSpace(line)
+			if len(rd.jsonFields) == 0 {
+				fields, err := discoverJSONFields(trimmed)
+				if err != nil {
 					return err
 				}
+				rd.jsonFields = fields
 			}
+			rd.headers = rd.jsonFields
+		} else {
+			rd.tryHeader(line)
 		}
-
-		step++
 		return nil
-	})
-	return lc, err
-}
-
-func (r *Row) Update(x float64, dataLabel string, averageSeek int) {
-	//add values to ring buffer and data containers
-	r.Data.Add(x)
-	r.Labels.Add(dataLabel)
-	r.DataContainer = append(r.DataContainer, x)
-	r.LabelContainer = append(r.LabelContainer, dataLabel)
-	r.AverageContainer = append(r.AverageContainer, findAverages(r.DataContainer))
-
-	//find the average value of all values in Datacontainer
-	avg := findAverages(r.Data.Last(averageSeek))
-	r.Averages.Add(avg)
-}
-
-func findAverages(values []float64) float64 {
-	var total float64
-	for _, value := range values {
-		total += value
-	}
-	average := total / float64(len(values))
-	return average
-}
-
-// calulate data stats
-func prepareStats(row *Row, buffer *float64RingBuffer) string {
-	//use only accumulated data instead of ring buffer
-	data := row.DataContainer
-	outliers, _ := stats.QuartileOutliers(data)
-	median, _ := stats.Median(data)
-	mean, _ := stats.Mean(data)
-	min, _ := stats.Min(data)
-	max, _ := stats.Max(data)
-	//variance, _ := stats.Variance(data)
-	//stddev, _ := stats.StandardDeviation(data)
-	var outlierStr string
-	var outliersArr []float64
-
-	//create the outliers slice
-	for _, v := range outliers.Extreme {
-		outliersArr = append(outliersArr, v)
-	}
-	//overwrite the outliers slice with the outliers
-	for _, v := range outliersArr {
-		outliersArr = append(outliersArr, v)
 	}
 
-	//reverse order so largest outliers appear first
-	for i := len(outliersArr)/2 - 1; i >= 0; i-- {
-		opp := len(outliersArr) - 1 - i
-		outliersArr[i], outliersArr[opp] = outliersArr[opp], outliersArr[i]
-	}
-	for i, v := range outliersArr {
-		if i == 0 || i == 1 || i == 2 {
-			s := fmt.Sprintf("%.2f", v)
-			outlierStr = outlierStr + s + "\n             "
-		}
-	}
-	//count records
-	count := len(data)
-	text := fmt.Sprintf("\nCount:       %d\nMin:         %.2f\nMean:        %.2f\nMedian:      %.2f\nMax:         %.2f\nOutliers:    %s",
-		count, min, mean, median, max, outlierStr)
-
-	return text
-}
-
-// periodic executes the provided closure periodically every interval.
-// Exits when the context expires.
-func periodic(ctx context.Context, interval time.Duration, fn func() error) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			if err := fn(); err != nil {
-				// panic(err)
-				return
+	// JSON: starts with '{'
+	trimmed := strings.TrimSpace(line)
+	if len(trimmed) > 0 && trimmed[0] == '{' {
+		rd.format = FormatJSON
+		// Discover fields from first object.
+		if len(rd.jsonFields) == 0 {
+			fields, err := discoverJSONFields(trimmed)
+			if err != nil {
+				return err
 			}
-		case <-ctx.Done():
-			return
+			rd.jsonFields = fields
+			rd.headers = fields
+		} else {
+			rd.headers = rd.jsonFields
+		}
+		return nil
+	}
+
+	// Delimiter sniffing: count candidate separators.
+	tabs := strings.Count(line, "\t")
+	commas := strings.Count(line, ",")
+	pipes := strings.Count(line, "|")
+
+	switch {
+	case tabs > 0 && tabs >= commas && tabs >= pipes:
+		rd.format = FormatTSV
+		rd.delimiter = "\t"
+	case commas > 0 && commas >= pipes:
+		rd.format = FormatCSV
+		rd.delimiter = ","
+	case pipes > 0:
+		rd.format = FormatCSV
+		rd.delimiter = "|"
+	default:
+		// Check for whitespace-separated numbers.
+		fields := strings.Fields(line)
+		if len(fields) > 1 {
+			rd.format = FormatSpace
+			rd.delimiter = "" // will use Fields()
+		} else {
+			rd.format = FormatSingle
+		}
+	}
+
+	rd.tryHeader(line)
+	return nil
+}
+
+func (rd *Reader) resolveDelimiter() {
+	if rd.forcedDelim != "" {
+		rd.delimiter = rd.forcedDelim
+		return
+	}
+	switch rd.format {
+	case FormatCSV:
+		rd.delimiter = ","
+	case FormatTSV:
+		rd.delimiter = "\t"
+	}
+}
+
+// tryHeader checks whether the first line looks like a header row
+// (i.e. the majority of fields are non-numeric strings).
+func (rd *Reader) tryHeader(line string) {
+	fields := rd.splitLine(line)
+	if len(fields) == 0 {
+		return
+	}
+	nonNumeric := 0
+	for _, f := range fields {
+		f = strings.TrimSpace(f)
+		if _, err := strconv.ParseFloat(f, 64); err != nil && f != "" {
+			nonNumeric++
+		}
+	}
+	// If more than half are non-numeric, treat as header.
+	if nonNumeric > len(fields)/2 {
+		rd.headers = make([]string, len(fields))
+		for i, f := range fields {
+			rd.headers[i] = strings.TrimSpace(f)
 		}
 	}
 }
 
-// rounding functions used by the bar chart
-func round(val float64) int {
-	if val < 0 {
-		return int(val - 0.5)
+// ---------------------------------------------------------------------------
+// Line parsing
+// ---------------------------------------------------------------------------
+
+func (rd *Reader) parseLine(line string) (Row, error) {
+	switch rd.format {
+	case FormatJSON:
+		return rd.parseJSON(line)
+	case FormatSingle:
+		return rd.parseSingle(line)
+	default:
+		return rd.parseDelimited(line)
 	}
-	return int(val + 0.5)
 }
 
-func roundUp(val float64) int {
-	if val > 0 {
-		return int(val + 1.0)
+func (rd *Reader) parseDelimited(line string) (Row, error) {
+	fields := rd.splitLine(line)
+	if len(fields) == 0 {
+		return Row{}, fmt.Errorf("empty row")
 	}
-	return int(val)
+
+	var row Row
+	startCol := 0
+
+	// If label mode is "first" and there are 2+ columns, treat
+	// column 0 as the X-axis label.
+	if rd.labelMode == "first" && len(fields) >= 2 {
+		first := strings.TrimSpace(fields[0])
+		if _, err := strconv.ParseFloat(first, 64); err != nil {
+			row.Label = first
+			startCol = 1
+		}
+	}
+
+	for i := startCol; i < len(fields); i++ {
+		f := strings.TrimSpace(fields[i])
+		if f == "" {
+			continue
+		}
+		// Strip common non-numeric decoration.
+		f = stripDecorations(f)
+		v, err := strconv.ParseFloat(f, 64)
+		if err != nil {
+			continue
+		}
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			continue
+		}
+		row.Values = append(row.Values, v)
+	}
+
+	if len(row.Values) == 0 {
+		return Row{}, fmt.Errorf("no numeric values in row")
+	}
+	return row, nil
+}
+
+func (rd *Reader) parseSingle(line string) (Row, error) {
+	f := strings.TrimSpace(line)
+	f = stripDecorations(f)
+	v, err := strconv.ParseFloat(f, 64)
+	if err != nil {
+		return Row{}, fmt.Errorf("not a number: %q", f)
+	}
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return Row{}, fmt.Errorf("NaN/Inf value")
+	}
+	return Row{Values: []float64{v}}, nil
+}
+
+func (rd *Reader) parseJSON(line string) (Row, error) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || trimmed[0] != '{' {
+		return Row{}, fmt.Errorf("not a JSON object")
+	}
+
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(trimmed), &obj); err != nil {
+		return Row{}, fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	var row Row
+	for _, field := range rd.jsonFields {
+		v, err := extractJSONFloat(obj, field)
+		if err != nil {
+			v = 0 // default missing fields to zero
+		}
+		row.Values = append(row.Values, v)
+	}
+
+	if len(row.Values) == 0 {
+		return Row{}, fmt.Errorf("no numeric fields extracted")
+	}
+	return row, nil
+}
+
+// ---------------------------------------------------------------------------
+// JSON helpers
+// ---------------------------------------------------------------------------
+
+// discoverJSONFields parses a JSON object and returns all top-level
+// keys whose values are numeric, in sorted order for determinism.
+func discoverJSONFields(line string) ([]string, error) {
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(line), &obj); err != nil {
+		return nil, fmt.Errorf("JSON discovery: %w", err)
+	}
+
+	var fields []string
+	for k, v := range obj {
+		switch v.(type) {
+		case float64, json.Number:
+			fields = append(fields, k)
+		}
+	}
+	if len(fields) == 0 {
+		return nil, fmt.Errorf("no numeric fields in JSON object")
+	}
+
+	// Sort for deterministic column order.
+	sortStrings(fields)
+	return fields, nil
+}
+
+func sortStrings(s []string) {
+	for i := 1; i < len(s); i++ {
+		key := s[i]
+		j := i - 1
+		for j >= 0 && s[j] > key {
+			s[j+1] = s[j]
+			j--
+		}
+		s[j+1] = key
+	}
+}
+
+// extractJSONFloat navigates a dot-separated path into a JSON object
+// and returns the value as a float64.
+//
+//	"cpu"             → obj["cpu"]
+//	"metrics.cpu"     → obj["metrics"]["cpu"]
+func extractJSONFloat(obj map[string]interface{}, path string) (float64, error) {
+	parts := strings.Split(path, ".")
+	var current interface{} = obj
+
+	for _, part := range parts {
+		m, ok := current.(map[string]interface{})
+		if !ok {
+			return 0, fmt.Errorf("field %q: parent is not an object", part)
+		}
+		current, ok = m[part]
+		if !ok {
+			return 0, fmt.Errorf("field %q: not found", part)
+		}
+	}
+
+	switch v := current.(type) {
+	case float64:
+		return v, nil
+	case json.Number:
+		return v.Float64()
+	case string:
+		return strconv.ParseFloat(v, 64)
+	case bool:
+		if v {
+			return 1, nil
+		}
+		return 0, nil
+	default:
+		return 0, fmt.Errorf("field is not numeric (type %T)", current)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Splitting & decoration helpers
+// ---------------------------------------------------------------------------
+
+func (rd *Reader) splitLine(line string) []string {
+	if rd.format == FormatSpace || rd.delimiter == "" {
+		return strings.Fields(line)
+	}
+	return strings.Split(line, rd.delimiter)
+}
+
+// stripDecorations removes currency symbols, percent signs, commas in
+// numbers, and surrounding whitespace so "$ 1,234.56%" → "1234.56".
+func stripDecorations(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, c := range s {
+		switch {
+		case c >= '0' && c <= '9':
+			b.WriteRune(c)
+		case c == '.' || c == '-' || c == '+':
+			b.WriteRune(c)
+		case c == 'e' || c == 'E': // scientific notation
+			b.WriteRune(c)
+		case unicode.IsSpace(c), c == '$', c == '€', c == '£',
+			c == '¥', c == '%', c == ',':
+			// strip
+		default:
+			// Unknown char — keep it and let ParseFloat reject if invalid.
+			b.WriteRune(c)
+		}
+	}
+	return b.String()
+}
+
+// ---------------------------------------------------------------------------
+// Formatting helpers (used by the main app for axis labels)
+// ---------------------------------------------------------------------------
+
+// FormatValue produces a human-friendly string for a numeric value,
+// using SI suffixes for large numbers and scientific notation for
+// very small ones.
+func FormatValue(v float64) string {
+	if v == 0 {
+		return "0"
+	}
+	abs := math.Abs(v)
+	switch {
+	case abs >= 1_000_000_000:
+		return fmt.Sprintf("%.1fG", v/1_000_000_000)
+	case abs >= 1_000_000:
+		return fmt.Sprintf("%.1fM", v/1_000_000)
+	case abs >= 10_000:
+		return fmt.Sprintf("%.1fK", v/1_000)
+	case abs >= 1_000:
+		return fmt.Sprintf("%.0f", v)
+	case abs >= 1:
+		return fmt.Sprintf("%.1f", v)
+	case abs >= 0.01:
+		return fmt.Sprintf("%.2f", v)
+	default:
+		return fmt.Sprintf("%.1e", v)
+	}
+}
+
+// FormatAxisValue is like FormatValue but right-pads to a fixed
+// width for aligned Y-axis display.
+func FormatAxisValue(v float64, width int) string {
+	s := FormatValue(v)
+	if len(s) >= width {
+		return s
+	}
+	return strings.Repeat(" ", width-len(s)) + s
 }
