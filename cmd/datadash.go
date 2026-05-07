@@ -154,12 +154,17 @@ func main() {
 // Application entry
 // =========================================================================
 
-func runApp(cmd *cobra.Command, args []string) error {
+// FIX 1: Use a named return so the deferred recover can set the error
+// instead of calling os.Exit(1), which was skipping every other defer
+// (including t.Close()) and leaving the terminal in raw mode.
+func runApp(cmd *cobra.Command, args []string) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Fprintf(os.Stderr, "\ndatadash: unexpected error: %v\n", r)
 			fmt.Fprintf(os.Stderr, "Please report: https://github.com/keithknott26/datadash/issues\n")
-			os.Exit(1)
+			retErr = fmt.Errorf("panic: %v", r)
+			// Other defers (t.Close, file close, cancel) now run normally
+			// because we are NOT calling os.Exit here.
 		}
 	}()
 
@@ -232,11 +237,10 @@ func runApp(cmd *cobra.Command, args []string) error {
 	}
 	defer t.Close()
 
-	termSize := t.Size()
-	chartWidth := int(float64(termSize.X) * float64(100-statsPercent) / 100.0)
-	if chartWidth < 20 {
-		chartWidth = 20
-	}
+	// FIX 2: Compute initial chartWidth but also recompute on every
+	// refresh tick (see refresh goroutine below) so that terminal
+	// resizes are handled correctly.
+	chartWidth := computeChartWidth(t)
 	ringCap := chartWidth * brailleMultiplier * 4
 	if ringCap < defaultRingCap {
 		ringCap = defaultRingCap
@@ -246,10 +250,15 @@ func runApp(cmd *cobra.Command, args []string) error {
 	sm := newSeriesManager(numSeries, ringCap)
 	sm.setHeaders(headers)
 
-	// Set X-axis label BEFORE push — push stores it in the label ring.
+	// FIX 5: Only set label when labelMode is not "none". Previously
+	// the "none" case fell through to the default branch, which would
+	// store labels from the data and display them in the stats pane,
+	// contradicting the user's intent.
 	switch cfg.labelMode {
 	case "time":
 		sm.setLastLabel(time.Now().Format("15:04:05"))
+	case "none":
+		// Deliberately store nothing.
 	default:
 		if firstRow.Label != "" {
 			sm.setLastLabel(firstRow.Label)
@@ -295,10 +304,12 @@ func runApp(cmd *cobra.Command, args []string) error {
 				slog.Debug("skip line", "err", err)
 				continue
 			}
-			// Set X-axis label BEFORE push — push stores it in the label ring.
+			// FIX 5 (cont.): respect "none" label mode in the reader loop too.
 			switch cfg.labelMode {
 			case "time":
 				sm.setLastLabel(time.Now().Format("15:04:05"))
+			case "none":
+				// Deliberately store nothing.
 			default:
 				if row.Label != "" {
 					sm.setLastLabel(row.Label)
@@ -320,7 +331,11 @@ func runApp(cmd *cobra.Command, args []string) error {
 			case <-rootCtx.Done():
 				return
 			case <-tick.C:
-				refreshCharts(panels, sm, vs, chartWidth)
+				// FIX 2: Recompute chartWidth from current terminal size
+				// on every tick so resizes are handled correctly. The old
+				// code computed it once at startup and never updated it.
+				cw := computeChartWidth(t)
+				refreshCharts(panels, sm, vs, cw)
 				refreshStats(panels, sm, showHelp.get())
 			}
 		}
@@ -358,6 +373,17 @@ func runApp(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	return nil
+}
+
+// computeChartWidth derives the usable chart width in terminal columns
+// from the current terminal dimensions.
+func computeChartWidth(t *tcell.Terminal) int {
+	sz := t.Size()
+	cw := int(float64(sz.X) * float64(100-statsPercent) / 100.0)
+	if cw < 20 {
+		cw = 20
+	}
+	return cw
 }
 
 // =========================================================================
@@ -744,7 +770,9 @@ func scaleToInts(data []float64, scale int) ([]int, int) {
 func scaleWithRange(data []float64, min, max float64, scale int) []int {
 	out := make([]int, len(data))
 
-	if min == max {
+	// FIX 6: Handle min > max (can happen with empty/degenerate stats)
+	// in addition to the existing min == max guard.
+	if min >= max {
 		for i := range out {
 			out[i] = scale / 2
 		}
@@ -889,6 +917,12 @@ func newSeriesManager(numSeries, capacity int) *seriesManager {
 func (sm *seriesManager) push(values []float64) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
+
+	// Grow rings dynamically if the incoming row has more columns than
+	// we started with, up to maxSeries. The UI panels only display the
+	// initially-detected series count, but the extra rings are kept so
+	// that (a) data isn't silently dropped and (b) future panel-rebuild
+	// logic can surface them.
 	for len(values) > len(sm.rings) && len(sm.rings) < maxSeries {
 		c := defaultRingCap
 		if len(sm.rings) > 0 {
@@ -901,7 +935,7 @@ func (sm *seriesManager) push(values []float64) {
 		sm.rings[i].Push(values[i])
 	}
 
-	// Store the pending X-axis label (set via setNextXLabel before push).
+	// Store the pending X-axis label (set via setLastLabel before push).
 	sm.xlabels[sm.xlabelPos%sm.xlabelCap] = sm.lastLabel
 	sm.xlabelPos++
 	if sm.xlabelLen < sm.xlabelCap {
@@ -951,6 +985,16 @@ func (sm *seriesManager) slice(idx, visibleWidth, offset int, zoom float64) []fl
 	if len(all) == 0 {
 		return nil
 	}
+
+	// FIX 4: Clamp offset to data length so the user cannot pan
+	// infinitely into the void and get a permanently blank chart.
+	// Previously panLeft was unbounded and once offset exceeded
+	// len(all), slice() returned nil with no way for the user to
+	// tell they had simply panned too far.
+	if offset >= len(all) {
+		offset = len(all) - 1
+	}
+
 	window := int(float64(visibleWidth*brailleMultiplier) * zoom)
 	if window < 10 {
 		window = 10
@@ -959,9 +1003,6 @@ func (sm *seriesManager) slice(idx, visibleWidth, offset int, zoom float64) []fl
 		window = len(all)
 	}
 	end := len(all) - offset
-	if end > len(all) {
-		end = len(all)
-	}
 	if end <= 0 {
 		return nil
 	}
@@ -1027,6 +1068,11 @@ func (sm *seriesManager) sliceLabels(visibleWidth, offset int, zoom float64) []s
 		return nil
 	}
 
+	// FIX 4 (cont.): Clamp offset for labels the same way we do for data.
+	if offset >= n {
+		offset = n - 1
+	}
+
 	window := int(float64(visibleWidth*brailleMultiplier) * zoom)
 	if window < 10 {
 		window = 10
@@ -1036,9 +1082,6 @@ func (sm *seriesManager) sliceLabels(visibleWidth, offset int, zoom float64) []s
 	}
 
 	end := n - offset
-	if end > n {
-		end = n
-	}
 	if end <= 0 {
 		return nil
 	}

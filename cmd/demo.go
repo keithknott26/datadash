@@ -72,6 +72,11 @@ var demoInput io.Reader
 // Generator dispatch
 // =========================================================================
 
+// maxDemoCols is the widest demo (metrics: cpu, mem, req/s, errors).
+// In cycle mode every generator pads its output to this many data
+// columns so the series count stays fixed across demo transitions.
+const maxDemoCols = 4
+
 func runGenerator(ctx context.Context, w io.Writer, name string) {
 	gens := map[string]func(context.Context, io.Writer){
 		"sine":    genSine,
@@ -82,8 +87,22 @@ func runGenerator(ctx context.Context, w io.Writer, name string) {
 	}
 
 	if name == "cycle" {
-		// Cycle through each demo for ~30 seconds.
-		order := []string{"sine", "metrics", "walk", "anomaly", "pulse"}
+		// FIX 7: Start cycle with "metrics" (the widest demo at 4
+		// data columns) so the initial series count accommodates
+		// every other demo. Previously the order started with "sine"
+		// (3 columns), so switching to "metrics" silently dropped
+		// the 4th column.
+		order := []string{"metrics", "sine", "walk", "anomaly", "pulse"}
+
+		// FIX 8: Write the header exactly once at the start. The old
+		// code wrote a new header line before EVERY demo in the cycle,
+		// which injected non-numeric lines mid-stream. The Reader had
+		// already consumed the first header and set its state; the
+		// subsequent header lines were silently dropped, but the column
+		// count mismatch between demos caused data to be pushed to the
+		// wrong series or not at all.
+		fmt.Fprintln(w, headerFor(order[0]))
+
 		for {
 			for _, n := range order {
 				select {
@@ -91,9 +110,14 @@ func runGenerator(ctx context.Context, w io.Writer, name string) {
 					return
 				default:
 				}
-				fmt.Fprintln(w, headerFor(n))
 				ctxDemo, cancel := context.WithTimeout(ctx, 30*time.Second)
-				gens[n](ctxDemo, w)
+				// FIX 9: Use padded generators in cycle mode so every
+				// row has exactly maxDemoCols data columns regardless
+				// of which demo is active. Without padding, demos with
+				// fewer columns (e.g. anomaly=1) would leave most
+				// series stale/frozen, and demos with more columns
+				// than the initial one would have data silently dropped.
+				genPadded(ctxDemo, w, gens[n], maxDemoCols)
 				cancel()
 			}
 		}
@@ -106,6 +130,50 @@ func runGenerator(ctx context.Context, w io.Writer, name string) {
 	}
 	fmt.Fprintln(w, headerFor(name))
 	gen(ctx, w)
+}
+
+// genPadded wraps a generator, intercepting its output and padding (or
+// truncating) each row to exactly `cols` data columns. The time column
+// (first field) is preserved as-is.
+func genPadded(ctx context.Context, w io.Writer, gen func(context.Context, io.Writer), cols int) {
+	pr, pw := io.Pipe()
+	go func() {
+		defer pw.Close()
+		gen(ctx, pw)
+	}()
+
+	buf := make([]byte, 0, 256)
+	tmp := make([]byte, 1)
+	for {
+		// Read one byte at a time to find newlines. This is fine at
+		// 40-50ms cadence — throughput is not a concern for demos.
+		_, err := pr.Read(tmp)
+		if err != nil {
+			return
+		}
+		if tmp[0] != '\n' {
+			buf = append(buf, tmp[0])
+			continue
+		}
+		line := string(buf)
+		buf = buf[:0]
+
+		fields := strings.Split(line, "\t")
+		if len(fields) == 0 {
+			continue
+		}
+		// First field is the time column; the rest are data.
+		timeCol := fields[0]
+		data := fields[1:]
+
+		// Pad or truncate data columns to exactly `cols`.
+		for len(data) < cols {
+			data = append(data, "0")
+		}
+		data = data[:cols]
+
+		fmt.Fprintf(w, "%s\t%s\n", timeCol, strings.Join(data, "\t"))
+	}
 }
 
 func headerFor(name string) string {
